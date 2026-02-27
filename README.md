@@ -74,20 +74,20 @@ go test ./...
 
 ## CLI Reference
 
-| Flag | Default | Description |
-|---|---|---|
-| `--demo` | - | Path to input `.dem` file (required) |
-| `--steamid` | - | Target SteamID64 (required, 17 digits) |
-| `--out` | `highlights.json` | Output JSON path (empty disables JSON output) |
-| `--hlae` | `highlights.cfg` | Output path for regular HLAE script |
-| `--hlae-headshots` | `headshots.cfg` | Output path for headshot montage HLAE script |
-| `--hlae-headshots-name` | `headshot_collection` | Recording name for montage output |
-| `--hlae-path` | `highlights` | Prefix used in `mirv_streams record name` |
-| `--hlae-preset` | `afxFfmpegYuv420p` | HLAE FFmpeg preset |
-| `--hlae-fps` | `60` | Recording frame rate |
-| `--hlae-preroll` | `3` | Seconds added before each event |
-| `--hlae-postroll` | `2` | Seconds added after each event |
-| `--hlae-kill-gap` | `10` | Seconds between kills in `round_multikill` to trigger an in-recording jump (`0` disables) |
+| Flag                    | Default               | Description                                                                               |
+| ----------------------- | --------------------- | ----------------------------------------------------------------------------------------- |
+| `--demo`                | -                     | Path to input `.dem` file (required)                                                      |
+| `--steamid`             | -                     | Target SteamID64 (required, 17 digits)                                                    |
+| `--out`                 | `highlights.json`     | Output JSON path (empty disables JSON output)                                             |
+| `--hlae`                | `highlights.cfg`      | Output path for regular HLAE script                                                       |
+| `--hlae-headshots`      | `headshots.cfg`       | Output path for headshot montage HLAE script                                              |
+| `--hlae-headshots-name` | `headshot_collection` | Recording name for montage output                                                         |
+| `--hlae-path`           | `highlights`          | Prefix used in `mirv_streams record name`                                                 |
+| `--hlae-preset`         | `afxFfmpegYuv420p`    | HLAE FFmpeg preset                                                                        |
+| `--hlae-fps`            | `60`                  | Recording frame rate                                                                      |
+| `--hlae-preroll`        | `3`                   | Seconds added before each event                                                           |
+| `--hlae-postroll`       | `2`                   | Seconds added after each event                                                            |
+| `--hlae-kill-gap`       | `10`                  | Seconds between kills in `round_multikill` to trigger an in-recording jump (`0` disables) |
 
 Disable headshot montage script generation:
 
@@ -122,24 +122,50 @@ Result: multiple output files, one per segment.
 
 Result: one montage-oriented output file.
 
-## JSON Output Model
+## Generated File Examples
+
+### `highlights.json`
 
 ```json
 {
   "demo": "mirage.dem",
-  "steamid": "7656119...",
+  "steamid": "7656119XXXXXXXXXX",
   "tick_rate": 64,
   "highlights": [
     {
-      "type": "clutch_win",
-      "round": 12,
-      "tick_start": 12345,
-      "tick_end": 12600,
+      "type": "round_multikill",
+      "round": 16,
+      "tick_start": 112258,
+      "tick_end": 112610,
       "kills": 3,
-      "meta": { "clutch": "1v3" }
+      "weapon": "M4A1",
+      "player_slot": 10
     }
   ]
 }
+```
+
+### `highlights.cfg`
+
+```cfg
+mirv_streams settings edit afxDefault settings afxFfmpegYuv420p;
+mirv_streams record fps 60;
+spec_show_xray 0;
+
+mirv_cmd addAtTick 112066 "spec_player 10; host_framerate 60; mirv_streams record name highlights_hl_0005_r16_round_multikill; mirv_streams record start";
+mirv_cmd addAtTick 112738 "mirv_streams record end; host_framerate 0";
+mirv_cmd addAtTick 112739 "demo_pause; demo_gototick 118230; spec_player 10; demo_resume";
+```
+
+### `headshots.cfg`
+
+```cfg
+mirv_streams settings edit afxDefault settings afxFfmpegYuv420p;
+mirv_streams record fps 60;
+
+mirv_cmd addAtTick 26746 "spec_player 10; host_framerate 60; mirv_streams record name highlights_headshot_collection; mirv_streams record start";
+mirv_cmd addAtTick 27067 "demo_pause; demo_gototick 59674; spec_player 10; demo_resume";
+mirv_cmd addAtTick 118664 "mirv_streams record end; host_framerate 0";
 ```
 
 ## Validation and Error Handling

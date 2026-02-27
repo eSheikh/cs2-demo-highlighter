@@ -74,20 +74,20 @@ go test ./...
 
 ## CLI Параметры
 
-| Flag | По умолчанию | Описание |
-|---|---|---|
-| `--demo` | - | Путь к входному `.dem` файлу (обязательно) |
-| `--steamid` | - | Целевой SteamID64 (обязательно, 17 цифр) |
-| `--out` | `highlights.json` | Путь к выходному JSON (пустое значение отключает JSON) |
-| `--hlae` | `highlights.cfg` | Путь к основному HLAE-скрипту |
-| `--hlae-headshots` | `headshots.cfg` | Путь к HLAE-скрипту headshot-монтажа |
-| `--hlae-headshots-name` | `headshot_collection` | Имя выходной записи для headshot-монтажа |
-| `--hlae-path` | `highlights` | Префикс для `mirv_streams record name` |
-| `--hlae-preset` | `afxFfmpegYuv420p` | HLAE FFmpeg preset |
-| `--hlae-fps` | `60` | FPS записи |
-| `--hlae-preroll` | `3` | Секунды до события |
-| `--hlae-postroll` | `2` | Секунды после события |
-| `--hlae-kill-gap` | `10` | Секунды между киллами в `round_multikill` для прыжка внутри записи (`0` отключает) |
+| Flag                    | По умолчанию          | Описание                                                                           |
+| ----------------------- | --------------------- | ---------------------------------------------------------------------------------- |
+| `--demo`                | -                     | Путь к входному `.dem` файлу (обязательно)                                         |
+| `--steamid`             | -                     | Целевой SteamID64 (обязательно, 17 цифр)                                           |
+| `--out`                 | `highlights.json`     | Путь к выходному JSON (пустое значение отключает JSON)                             |
+| `--hlae`                | `highlights.cfg`      | Путь к основному HLAE-скрипту                                                      |
+| `--hlae-headshots`      | `headshots.cfg`       | Путь к HLAE-скрипту headshot-монтажа                                               |
+| `--hlae-headshots-name` | `headshot_collection` | Имя выходной записи для headshot-монтажа                                           |
+| `--hlae-path`           | `highlights`          | Префикс для `mirv_streams record name`                                             |
+| `--hlae-preset`         | `afxFfmpegYuv420p`    | HLAE FFmpeg preset                                                                 |
+| `--hlae-fps`            | `60`                  | FPS записи                                                                         |
+| `--hlae-preroll`        | `3`                   | Секунды до события                                                                 |
+| `--hlae-postroll`       | `2`                   | Секунды после события                                                              |
+| `--hlae-kill-gap`       | `10`                  | Секунды между киллами в `round_multikill` для прыжка внутри записи (`0` отключает) |
 
 Отключить генерацию headshot-монтажа:
 
@@ -122,24 +122,50 @@ go run ./cmd/highlighter ... --out ""
 
 Результат: один монтажный выходной файл.
 
-## Модель JSON Вывода
+## Примеры Сгенерированных Файлов
+
+### `highlights.json`
 
 ```json
 {
   "demo": "mirage.dem",
-  "steamid": "7656119...",
+  "steamid": "7656119XXXXXXXXXX",
   "tick_rate": 64,
   "highlights": [
     {
-      "type": "clutch_win",
-      "round": 12,
-      "tick_start": 12345,
-      "tick_end": 12600,
+      "type": "round_multikill",
+      "round": 16,
+      "tick_start": 112258,
+      "tick_end": 112610,
       "kills": 3,
-      "meta": { "clutch": "1v3" }
+      "weapon": "M4A1",
+      "player_slot": 10
     }
   ]
 }
+```
+
+### `highlights.cfg`
+
+```cfg
+mirv_streams settings edit afxDefault settings afxFfmpegYuv420p;
+mirv_streams record fps 60;
+spec_show_xray 0;
+
+mirv_cmd addAtTick 112066 "spec_player 10; host_framerate 60; mirv_streams record name highlights_hl_0005_r16_round_multikill; mirv_streams record start";
+mirv_cmd addAtTick 112738 "mirv_streams record end; host_framerate 0";
+mirv_cmd addAtTick 112739 "demo_pause; demo_gototick 118230; spec_player 10; demo_resume";
+```
+
+### `headshots.cfg`
+
+```cfg
+mirv_streams settings edit afxDefault settings afxFfmpegYuv420p;
+mirv_streams record fps 60;
+
+mirv_cmd addAtTick 26746 "spec_player 10; host_framerate 60; mirv_streams record name highlights_headshot_collection; mirv_streams record start";
+mirv_cmd addAtTick 27067 "demo_pause; demo_gototick 59674; spec_player 10; demo_resume";
+mirv_cmd addAtTick 118664 "mirv_streams record end; host_framerate 0";
 ```
 
 ## Валидация и Обработка Ошибок

@@ -44,3 +44,8 @@ coverage.out
 
 # Temporary files
 tmp/
+
+# Generated output artifacts
+highlights.json
+highlights.cfg
+headshots.cfg
