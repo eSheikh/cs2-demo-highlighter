@@ -1,6 +1,6 @@
 package service
 
-import "cs2-demo-highlighter/internal/model"
+import "github.com/eSheikh/cs2-demo-highlighter/internal/model"
 
 type singleKillRule struct {
 	highlightType model.HighlightType

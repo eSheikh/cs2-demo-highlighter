@@ -1,6 +1,6 @@
 package service
 
-import "cs2-demo-highlighter/internal/model"
+import "github.com/eSheikh/cs2-demo-highlighter/internal/model"
 
 func (s *HighlightService) buildHeadshotCollectionHighlights(demo string, steamID string, kills []model.KillEvent) []model.Highlight {
 	headshots := filterHeadshots(kills)

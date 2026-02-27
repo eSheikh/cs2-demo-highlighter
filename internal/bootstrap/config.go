@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"cs2-demo-highlighter/internal/demo"
-	"cs2-demo-highlighter/internal/hlae"
-	"cs2-demo-highlighter/internal/service"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/demo"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/hlae"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/service"
 )
 
 type Config struct {

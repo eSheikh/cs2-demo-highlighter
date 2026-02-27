@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"cs2-demo-highlighter/internal/model"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
 
 func TestBuildHighlightsBuildsSingleAndMultiKill(t *testing.T) {

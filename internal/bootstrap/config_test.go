@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"cs2-demo-highlighter/internal/demo"
-	"cs2-demo-highlighter/internal/hlae"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/demo"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/hlae"
 )
 
 func TestConfigValidateDemoPathAndSteamID(t *testing.T) {

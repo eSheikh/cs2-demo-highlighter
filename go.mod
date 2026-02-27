@@ -1,4 +1,4 @@
-module cs2-demo-highlighter
+module github.com/eSheikh/cs2-demo-highlighter
 
 go 1.26
 

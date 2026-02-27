@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"cs2-demo-highlighter/internal/model"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
 
 func TestResolveSegmentsMergesOverlap(t *testing.T) {

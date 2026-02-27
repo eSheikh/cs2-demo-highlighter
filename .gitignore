@@ -44,6 +44,7 @@ coverage.out
 
 # Temporary files
 tmp/
+.gocache/
 
 # Generated output artifacts
 highlights.json

@@ -48,7 +48,7 @@ The tool can generate:
 ## Installation
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/eSheikh/cs2-demo-highlighter.git
 cd cs2-demo-highlighter
 go mod download
 ```

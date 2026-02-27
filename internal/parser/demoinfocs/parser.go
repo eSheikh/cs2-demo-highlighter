@@ -12,8 +12,8 @@ import (
 	"github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/common"
 	"github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/events"
 
-	"cs2-demo-highlighter/internal/demo"
-	"cs2-demo-highlighter/internal/model"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/demo"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
 
 type Parser struct{}

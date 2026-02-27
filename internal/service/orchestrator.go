@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"cs2-demo-highlighter/internal/model"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
 
 type DemoParser interface {

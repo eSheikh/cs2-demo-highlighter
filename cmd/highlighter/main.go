@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"cs2-demo-highlighter/internal/bootstrap"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/bootstrap"
 )
 
 func main() {

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"cs2-demo-highlighter/internal/model"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
 
 type Repository struct {

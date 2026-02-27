@@ -3,7 +3,7 @@ package service
 import (
 	"slices"
 
-	"cs2-demo-highlighter/internal/model"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
 
 func (s *HighlightService) buildMultiKillHighlights(demo string, steamID string, kills []model.KillEvent) []model.Highlight {

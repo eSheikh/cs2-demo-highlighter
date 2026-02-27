@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"cs2-demo-highlighter/internal/model"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
 
 type roundKillWindow struct {

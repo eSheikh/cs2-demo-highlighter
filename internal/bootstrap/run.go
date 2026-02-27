@@ -6,11 +6,11 @@ import (
 	"flag"
 	"log"
 
-	"cs2-demo-highlighter/internal/hlae"
-	"cs2-demo-highlighter/internal/model"
-	"cs2-demo-highlighter/internal/parser/demoinfocs"
-	"cs2-demo-highlighter/internal/repository/jsonrepo"
-	"cs2-demo-highlighter/internal/service"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/hlae"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/parser/demoinfocs"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/repository/jsonrepo"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/service"
 )
 
 func Run(ctx context.Context, args []string, logger *log.Logger) error {

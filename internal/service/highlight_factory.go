@@ -1,6 +1,6 @@
 package service
 
-import "cs2-demo-highlighter/internal/model"
+import "github.com/eSheikh/cs2-demo-highlighter/internal/model"
 
 func newSingleKillHighlight(demo string, steamID string, kill model.KillEvent, highlightType model.HighlightType) model.Highlight {
 	return model.Highlight{

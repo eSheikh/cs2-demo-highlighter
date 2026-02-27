@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"cs2-demo-highlighter/internal/demo"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/demo"
 )
 
 func TestParseRejectsNonDemoExtension(t *testing.T) {
