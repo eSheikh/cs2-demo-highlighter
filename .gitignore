@@ -1,0 +1,46 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.app
+
+# Go build artifacts
+/bin/
+/dist/
+/build/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency directories (если вдруг используешь старый dep)
+vendor/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Coverage files
+coverage.out
+*.coverprofile
+
+# Environment files
+.env
+.env.local
+
+# Temporary files
+tmp/
