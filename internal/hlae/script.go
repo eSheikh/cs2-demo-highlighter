@@ -3,7 +3,6 @@ package hlae
 import (
 	"cmp"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -174,6 +173,10 @@ func (b *ScriptBuilder) writeSetup(w *strings.Builder, steamID string) {
 	writeCommandLine(w, "mirv_cvar_unhide_all")
 	writeCommandLine(w, "mirv_cmd clear")
 	writeCommandLine(w, "mirv_streams record end")
+	dir := strings.TrimSpace(b.OutputPath)
+	if dir != "" {
+		writeCommandLine(w, fmt.Sprintf("mirv_streams record name %q", dir))
+	}
 	writeCommandLine(w, fmt.Sprintf("mirv_streams settings edit afxDefault settings %s", b.ffmpegPreset()))
 	writeCommandLine(w, "mirv_streams record screen enabled 1")
 	writeCommandLine(w, fmt.Sprintf("mirv_streams record fps %d", b.frameRate()))
@@ -200,33 +203,31 @@ func (b *ScriptBuilder) writeTickCommands(w *strings.Builder, segs []recordingSe
 	}
 
 	for i, seg := range segs {
-		recordPath := b.resolveRecordPath(seg.Name)
 		startParts := append(povCommandsBySlot(seg.PlayerSlot),
 			fmt.Sprintf("host_framerate %d", b.frameRate()),
-			fmt.Sprintf(`mirv_streams record name "%s"`, recordPath),
 			"mirv_streams record start",
 		)
 		startCmd := joinCommands(startParts...)
 		endCmd := joinCommands("mirv_streams record end", "host_framerate 0")
 
-		writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d '%s'", seg.StartTick, escapeForAddAtTick(startCmd)))
-		writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d '%s'", seg.EndTick, escapeForAddAtTick(endCmd)))
+		writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"%s\"", seg.StartTick, startCmd))
+		writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"%s\"", seg.EndTick, endCmd))
 		for _, jump := range b.resolveIntraSegmentJumps(seg) {
 			jumpParts := append([]string{"demo_pause", fmt.Sprintf("demo_gototick %d", jump.SeekTick)}, povCommandsBySlot(jump.PlayerSlot)...)
 			jumpParts = append(jumpParts, "demo_resume")
-			writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d '%s'", jump.AtTick, escapeForAddAtTick(joinCommands(jumpParts...))))
+			writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"%s\"", jump.AtTick, joinCommands(jumpParts...)))
 		}
 
 		if i+1 < len(segs) {
 			next := segs[i+1]
 			nextSeek := seekTickBefore(next.StartTick)
-			writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d '%s'", seg.EndTick+1, escapeForAddAtTick(buildSeekJumpCommand(nextSeek, next.PlayerSlot))))
+			writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"%s\"", seg.EndTick+1, buildSeekJumpCommand(nextSeek, next.PlayerSlot)))
 		}
 	}
 
 	lastTick := segs[len(segs)-1].EndTick + 1
-	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d 'echo === All %d segments recorded ==='", lastTick, len(segs)))
-	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d 'disconnect'", lastTick+1))
+	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"echo === All %d segments recorded ===\"", lastTick, len(segs)))
+	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"disconnect\"", lastTick+1))
 	w.WriteString("\n")
 
 	b.writeInitialSeek(w, segs[0], "Auto-seek to first segment", true)
@@ -239,14 +240,12 @@ func (b *ScriptBuilder) writeHeadshotMontageCommands(w *strings.Builder, segs []
 	}
 
 	first := segs[0]
-	recordPath := b.resolveRecordPath(headshotMontageNameToken(montageName))
 
 	startParts := append(povCommandsBySlot(first.PlayerSlot),
 		fmt.Sprintf("host_framerate %d", b.frameRate()),
-		fmt.Sprintf(`mirv_streams record name "%s"`, recordPath),
 		"mirv_streams record start",
 	)
-	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d '%s'", first.StartTick, escapeForAddAtTick(joinCommands(startParts...))))
+	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"%s\"", first.StartTick, joinCommands(startParts...)))
 
 	for i, seg := range segs {
 		if i+1 >= len(segs) {
@@ -255,14 +254,14 @@ func (b *ScriptBuilder) writeHeadshotMontageCommands(w *strings.Builder, segs []
 
 		next := segs[i+1]
 		nextSeek := seekTickBefore(next.StartTick)
-		writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d '%s'", seg.EndTick+1, escapeForAddAtTick(buildSeekJumpCommand(nextSeek, next.PlayerSlot))))
+		writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"%s\"", seg.EndTick+1, buildSeekJumpCommand(nextSeek, next.PlayerSlot)))
 	}
 
 	last := segs[len(segs)-1]
 	stopCmd := joinCommands("mirv_streams record end", "host_framerate 0")
-	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d '%s'", last.EndTick, escapeForAddAtTick(stopCmd)))
-	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d 'echo === Headshot montage recorded ==='", last.EndTick+1))
-	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d 'disconnect'", last.EndTick+2))
+	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"%s\"", last.EndTick, stopCmd))
+	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"echo === Headshot montage recorded ===\"", last.EndTick+1))
+	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"disconnect\"", last.EndTick+2))
 	w.WriteString("\n")
 
 	b.writeInitialSeek(w, first, "Auto-seek to first headshot segment", true)
@@ -273,10 +272,9 @@ func (b *ScriptBuilder) writeHeadshotMontageFooter(w *strings.Builder, segs []re
 		writeCommandLine(w, "echo \"Loaded 0 headshot montage segments.\"")
 		return
 	}
-	nameToken := headshotMontageNameToken(montageName)
 	writeCommandLine(w, fmt.Sprintf("echo \"Loaded %d headshot montage segments into one recording.\"",
 		len(segs)))
-	writeCommandLine(w, fmt.Sprintf("echo \"Output name: %s\"", b.resolveRecordPath(nameToken)))
+	writeCommandLine(w, fmt.Sprintf("echo \"Output name: %s\"", headshotMontageNameToken(montageName)))
 }
 
 func headshotMontageNameToken(rawName string) string {
@@ -379,14 +377,6 @@ func (b *ScriptBuilder) ffmpegPreset() string {
 	return cmp.Or(sanitizePresetToken(b.FFmpegPreset), defaultPreset)
 }
 
-func (b *ScriptBuilder) resolveRecordPath(segmentName string) string {
-	dir := strings.TrimSpace(b.OutputPath)
-	if dir == "" {
-		return segmentName
-	}
-	return filepath.Join(dir, segmentName)
-}
-
 func (b *ScriptBuilder) buildName(seg recordingSegment) string {
 	if len(seg.Highlights) == 0 {
 		return fmt.Sprintf("hl_%04d", seg.Index)
@@ -436,10 +426,6 @@ func sanitizePresetToken(value string) string {
 		}
 	}
 	return string(buf)
-}
-
-func escapeForAddAtTick(command string) string {
-	return strings.ReplaceAll(command, `'`, `\'`)
 }
 
 func seekTickBefore(tick int) int {

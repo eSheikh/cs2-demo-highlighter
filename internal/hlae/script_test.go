@@ -1,8 +1,6 @@
 package hlae
 
 import (
-	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -75,9 +73,8 @@ func TestBuildUsesPresetAndPovLock(t *testing.T) {
 	if strings.Contains(script, "spec_lock_to_accountid") {
 		t.Fatalf("legacy accountid lock must not be present")
 	}
-	expectedName := filepath.Join("highlights", "hl_0001_r3_wallbang")
-	if !strings.Contains(script, fmt.Sprintf(`mirv_streams record name "%s";`, expectedName)) {
-		t.Fatalf("expected record name with full path")
+	if !strings.Contains(script, `mirv_streams record name "highlights";`) {
+		t.Fatalf("expected record name with output path in setup")
 	}
 	if !strings.Contains(script, "mirv_deathmsg filter add attackerMatch=!x76561197960266727 block=1 lastRule=1;") {
 		t.Fatalf("expected killfeed filter for selected steamid")
@@ -104,13 +101,13 @@ func TestBuildAddsAutoSkipBetweenSegments(t *testing.T) {
 	}
 
 	script := builder.Build(result)
-	if !strings.Contains(script, "mirv_cmd addAtTick 121 'demo_pause; demo_gototick 299; spec_player 8; demo_resume';") {
+	if !strings.Contains(script, "mirv_cmd addAtTick 121 \"demo_pause; demo_gototick 299; spec_player 8; demo_resume\";") {
 		t.Fatalf("expected pause->seek->resume with next segment slot")
 	}
-	if !strings.Contains(script, "mirv_cmd addAtTick 100 'spec_player 4; host_framerate 60;") {
+	if !strings.Contains(script, "mirv_cmd addAtTick 100 \"spec_player 4; host_framerate 60;") {
 		t.Fatalf("expected first segment to use its own slot")
 	}
-	if !strings.Contains(script, "mirv_cmd addAtTick 322 'disconnect';") {
+	if !strings.Contains(script, "mirv_cmd addAtTick 322 \"disconnect\";") {
 		t.Fatalf("expected disconnect after all regular segments")
 	}
 }
@@ -135,13 +132,13 @@ func TestBuildAddsIntraSegmentJumpForRoundMultikillGap(t *testing.T) {
 	}
 
 	script := builder.Build(result)
-	if !strings.Contains(script, "mirv_cmd addAtTick 136 'demo_pause; demo_gototick 229; spec_player 7; demo_resume';") {
+	if !strings.Contains(script, "mirv_cmd addAtTick 136 \"demo_pause; demo_gototick 229; spec_player 7; demo_resume\";") {
 		t.Fatalf("expected one intra-segment jump for large kill gap")
 	}
 	if strings.Count(script, "mirv_streams record start") != 1 {
 		t.Fatalf("expected one recording start for the segment")
 	}
-	if strings.Contains(script, "mirv_cmd addAtTick 106 'demo_pause; demo_gototick") {
+	if strings.Contains(script, "mirv_cmd addAtTick 106 \"demo_pause; demo_gototick") {
 		t.Fatalf("did not expect jump for small kill gap")
 	}
 }
@@ -180,9 +177,8 @@ func TestBuildHeadshotMontageSingleOutputFile(t *testing.T) {
 	}
 
 	script := builder.BuildHeadshotMontage(result, "headshot_collection")
-	expectedName := filepath.Join("highlights", "headshot_collection")
-	if !strings.Contains(script, fmt.Sprintf(`mirv_streams record name "%s";`, expectedName)) {
-		t.Fatalf("expected one output file name for headshot montage")
+	if !strings.Contains(script, `mirv_streams record name "highlights";`) {
+		t.Fatalf("expected record name with output path in setup")
 	}
 	if strings.Count(script, "mirv_streams record start") != 1 {
 		t.Fatalf("expected exactly one record start for montage")
@@ -190,10 +186,10 @@ func TestBuildHeadshotMontageSingleOutputFile(t *testing.T) {
 	if strings.Count(script, "mirv_streams record end") < 2 {
 		t.Fatalf("expected setup end + final end commands in montage script")
 	}
-	if !strings.Contains(script, "mirv_cmd addAtTick 111 'demo_pause; demo_gototick 299; spec_player 8; demo_resume';") {
+	if !strings.Contains(script, "mirv_cmd addAtTick 111 \"demo_pause; demo_gototick 299; spec_player 8; demo_resume\";") {
 		t.Fatalf("expected auto jump between headshot segments")
 	}
-	if !strings.Contains(script, "mirv_cmd addAtTick 312 'disconnect';") {
+	if !strings.Contains(script, "mirv_cmd addAtTick 312 \"disconnect\";") {
 		t.Fatalf("expected disconnect after headshot montage")
 	}
 }
@@ -219,38 +215,5 @@ func TestHelpersUseStableFallbacks(t *testing.T) {
 	}
 	if got := seekTickBefore(8); got != 7 {
 		t.Fatalf("expected seek tick 7, got %d", got)
-	}
-}
-
-func TestResolveRecordPathReturnsFullPath(t *testing.T) {
-	builder := NewScriptBuilder()
-	builder.OutputPath = "C:\\recordings"
-
-	got := builder.resolveRecordPath("hl_0001_r3_wallbang")
-	want := filepath.Join("C:\\recordings", "hl_0001_r3_wallbang")
-	if got != want {
-		t.Fatalf("expected %q, got %q", want, got)
-	}
-}
-
-func TestResolveRecordPathEmptyOutputPath(t *testing.T) {
-	builder := NewScriptBuilder()
-	builder.OutputPath = ""
-
-	got := builder.resolveRecordPath("hl_0001_r3_wallbang")
-	want := "hl_0001_r3_wallbang"
-	if got != want {
-		t.Fatalf("expected %q, got %q", want, got)
-	}
-}
-
-func TestResolveRecordPathPreservesDirectoryAsIs(t *testing.T) {
-	builder := NewScriptBuilder()
-	builder.OutputPath = "/home/user/recordings"
-
-	got := builder.resolveRecordPath("hl_0001_r3_wallbang")
-	want := filepath.Join("/home/user/recordings", "hl_0001_r3_wallbang")
-	if got != want {
-		t.Fatalf("expected %q, got %q", want, got)
 	}
 }
