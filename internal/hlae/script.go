@@ -3,7 +3,6 @@ package hlae
 import (
 	"cmp"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -174,6 +173,7 @@ func (b *ScriptBuilder) writeSetup(w *strings.Builder, steamID string) {
 	writeCommandLine(w, "mirv_cvar_unhide_all")
 	writeCommandLine(w, "mirv_cmd clear")
 	writeCommandLine(w, "mirv_streams record end")
+	writeCommandLine(w, fmt.Sprintf("mirv_streams record outputPath %s", b.resolveOutputPath()))
 	writeCommandLine(w, fmt.Sprintf("mirv_streams settings edit afxDefault settings %s", b.ffmpegPreset()))
 	writeCommandLine(w, "mirv_streams record screen enabled 1")
 	writeCommandLine(w, fmt.Sprintf("mirv_streams record fps %d", b.frameRate()))
@@ -379,12 +379,16 @@ func (b *ScriptBuilder) ffmpegPreset() string {
 	return cmp.Or(sanitizePresetToken(b.FFmpegPreset), defaultPreset)
 }
 
-func (b *ScriptBuilder) resolveRecordPath(segmentName string) string {
+func (b *ScriptBuilder) resolveOutputPath() string {
 	dir := strings.TrimSpace(b.OutputPath)
 	if dir == "" {
-		return segmentName
+		return "."
 	}
-	return strings.ReplaceAll(filepath.Join(dir, segmentName), `\`, `/`)
+	return strings.ReplaceAll(dir, `\`, `/`)
+}
+
+func (b *ScriptBuilder) resolveRecordPath(segmentName string) string {
+	return segmentName
 }
 
 func (b *ScriptBuilder) buildName(seg recordingSegment) string {
