@@ -74,6 +74,10 @@ func registerHandlers(
 	})
 
 	parser.RegisterEventHandler(func(e events.Kill) {
+		if parser.GameState().IsWarmupPeriod() {
+			return
+		}
+
 		kill, ok := buildKillEvent(parser, steamID, e)
 		if !ok {
 			return
