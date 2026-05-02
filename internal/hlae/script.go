@@ -175,7 +175,7 @@ func (b *ScriptBuilder) writeSetup(w *strings.Builder, steamID string) {
 	writeCommandLine(w, "mirv_streams record end")
 	dir := strings.TrimSpace(b.OutputPath)
 	if dir != "" {
-		writeCommandLine(w, fmt.Sprintf("mirv_streams record name %q", dir))
+		writeCommandLine(w, fmt.Sprintf(`mirv_streams record name "%s"`, dir))
 	}
 	writeCommandLine(w, fmt.Sprintf("mirv_streams settings edit afxDefault settings %s", b.ffmpegPreset()))
 	writeCommandLine(w, "mirv_streams record screen enabled 1")
