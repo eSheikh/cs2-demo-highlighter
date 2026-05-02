@@ -3,6 +3,7 @@ package hlae
 import (
 	"cmp"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -178,8 +179,9 @@ func (b *ScriptBuilder) writeSetup(w *strings.Builder, steamID string) {
 	writeCommandLine(w, fmt.Sprintf("mirv_streams record fps %d", b.frameRate()))
 	writeCommandLine(w, "spec_show_xray 0")
 	writeCommandLine(w, "demoui 0")
-	writeCommandLine(w, "cl_truview_show_status 0")
+	writeCommandLine(w, "cl_trueview_show_status 0")
 	writeCommandLine(w, "cl_drawhud 0")
+	writeCommandLine(w, "r_show_build_info false")
 	writeCommandLine(w, "cl_drawhud_force_radar -1")
 	writeCommandLine(w, "cl_drawhud_force_deathnotices 1")
 	writeCommandLine(w, "mirv_deathmsg filter clear")
@@ -378,11 +380,11 @@ func (b *ScriptBuilder) ffmpegPreset() string {
 }
 
 func (b *ScriptBuilder) resolveRecordPath(segmentName string) string {
-	base := sanitizeNameToken(strings.ReplaceAll(strings.TrimSpace(b.OutputPath), "/", "_"))
-	if base == "" {
+	dir := strings.TrimSpace(b.OutputPath)
+	if dir == "" {
 		return segmentName
 	}
-	return base + "_" + segmentName
+	return filepath.Join(dir, segmentName)
 }
 
 func (b *ScriptBuilder) buildName(seg recordingSegment) string {

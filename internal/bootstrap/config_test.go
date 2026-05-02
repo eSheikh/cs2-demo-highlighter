@@ -138,3 +138,53 @@ func TestParseConfigTrimsCLIInputs(t *testing.T) {
 		t.Fatalf("expected trimmed preset, got %q", cfg.HLAE.FFmpegPreset)
 	}
 }
+
+func TestParseConfigCustomOutputPath(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	validDemo := filepath.Join(tempDir, "valid.dem")
+	if err := os.WriteFile(validDemo, []byte("demo-content"), 0o644); err != nil {
+		t.Fatalf("write valid demo: %v", err)
+	}
+
+	cfg, err := ParseConfig([]string{
+		"--demo", validDemo,
+		"--steamid", "76561197960265728",
+		"--hlae-path", "C:\\recordings",
+	})
+	if err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+
+	if cfg.HLAE.OutputPath != "C:\\recordings" {
+		t.Fatalf("expected output path %q, got %q", "C:\\recordings", cfg.HLAE.OutputPath)
+	}
+}
+
+func TestParseConfigDefaultOutputPath(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	validDemo := filepath.Join(tempDir, "valid.dem")
+	if err := os.WriteFile(validDemo, []byte("demo-content"), 0o644); err != nil {
+		t.Fatalf("write valid demo: %v", err)
+	}
+
+	cfg, err := ParseConfig([]string{
+		"--demo", validDemo,
+		"--steamid", "76561197960265728",
+	})
+	if err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+
+	if cfg.HLAE.OutputPath == "" {
+		t.Fatalf("expected non-empty default output path")
+	}
+	cwd, _ := os.Getwd()
+	expected := filepath.Clean(cwd)
+	if cfg.HLAE.OutputPath != expected {
+		t.Fatalf("expected default output path %q, got %q", expected, cfg.HLAE.OutputPath)
+	}
+}

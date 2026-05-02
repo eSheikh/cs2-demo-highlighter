@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/eSheikh/cs2-demo-highlighter/internal/demo"
@@ -18,6 +20,12 @@ type Config struct {
 }
 
 func ParseConfig(args []string) (Config, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	defaultOutputPath := filepath.Clean(cwd)
+
 	cfg := Config{
 		OutputPath: "highlights.json",
 		HLAE: hlae.Options{
@@ -25,7 +33,7 @@ func ParseConfig(args []string) (Config, error) {
 			HeadshotMontageScriptPath: "headshots.cfg",
 			HeadshotMontageName:       "headshot_collection",
 			FrameRate:                 60,
-			OutputPath:                "highlights",
+			OutputPath:                defaultOutputPath,
 			FFmpegPreset:              "afxFfmpegYuv420p",
 			PreRollSeconds:            3,
 			PostRollSeconds:           2,
@@ -41,7 +49,7 @@ func ParseConfig(args []string) (Config, error) {
 	flags.StringVar(&cfg.HLAE.HeadshotMontageScriptPath, "hlae-headshots", cfg.HLAE.HeadshotMontageScriptPath, "output HLAE script path for one-file headshot montage")
 	flags.StringVar(&cfg.HLAE.HeadshotMontageName, "hlae-headshots-name", cfg.HLAE.HeadshotMontageName, "recording output name for headshot montage")
 	flags.IntVar(&cfg.HLAE.FrameRate, "hlae-fps", cfg.HLAE.FrameRate, "recording framerate")
-	flags.StringVar(&cfg.HLAE.OutputPath, "hlae-path", cfg.HLAE.OutputPath, "recording output folder prefix used by mirv_streams record name")
+	flags.StringVar(&cfg.HLAE.OutputPath, "hlae-path", cfg.HLAE.OutputPath, "output directory for mirv_streams recordings")
 	flags.StringVar(&cfg.HLAE.FFmpegPreset, "hlae-preset", cfg.HLAE.FFmpegPreset, "HLAE ffmpeg preset for mirv_streams")
 	flags.IntVar(&cfg.HLAE.PreRollSeconds, "hlae-preroll", cfg.HLAE.PreRollSeconds, "seconds added before each highlight")
 	flags.IntVar(&cfg.HLAE.PostRollSeconds, "hlae-postroll", cfg.HLAE.PostRollSeconds, "seconds added after each highlight")
