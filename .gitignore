@@ -50,3 +50,6 @@ tmp/
 highlights.json
 highlights.cfg
 headshots.cfg
+
+# dem files
+*.dem
