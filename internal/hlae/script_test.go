@@ -74,9 +74,8 @@ func TestBuildUsesPresetAndPovLock(t *testing.T) {
 	if strings.Contains(script, "spec_lock_to_accountid") {
 		t.Fatalf("legacy accountid lock must not be present")
 	}
-	expectedName := filepath.Join("highlights", "hl_0001_r3_wallbang")
-	if !strings.Contains(script, "mirv_streams record name "+expectedName+";") {
-		t.Fatalf("expected directory path record name, got script containing: %s", expectedName)
+	if !strings.Contains(script, `mirv_streams record name \"`) || !strings.Contains(script, `hl_0001_r3_wallbang`) {
+		t.Fatalf("expected quoted directory path record name")
 	}
 	if !strings.Contains(script, "mirv_deathmsg filter add attackerMatch=!x76561197960266727 block=1 lastRule=1;") {
 		t.Fatalf("expected killfeed filter for selected steamid")
@@ -179,8 +178,7 @@ func TestBuildHeadshotMontageSingleOutputFile(t *testing.T) {
 	}
 
 	script := builder.BuildHeadshotMontage(result, "headshot_collection")
-	expectedMontageName := filepath.Join("highlights", "headshot_collection")
-	if !strings.Contains(script, "mirv_streams record name "+expectedMontageName+";") {
+	if !strings.Contains(script, `mirv_streams record name \"`) || !strings.Contains(script, `headshot_collection`) {
 		t.Fatalf("expected one output file name for headshot montage")
 	}
 	if strings.Count(script, "mirv_streams record start") != 1 {

@@ -203,7 +203,7 @@ func (b *ScriptBuilder) writeTickCommands(w *strings.Builder, segs []recordingSe
 		recordPath := b.resolveRecordPath(seg.Name)
 		startParts := append(povCommandsBySlot(seg.PlayerSlot),
 			fmt.Sprintf("host_framerate %d", b.frameRate()),
-			fmt.Sprintf("mirv_streams record name %s", recordPath),
+			fmt.Sprintf(`mirv_streams record name "%s"`, recordPath),
 			"mirv_streams record start",
 		)
 		startCmd := joinCommands(startParts...)
@@ -243,7 +243,7 @@ func (b *ScriptBuilder) writeHeadshotMontageCommands(w *strings.Builder, segs []
 
 	startParts := append(povCommandsBySlot(first.PlayerSlot),
 		fmt.Sprintf("host_framerate %d", b.frameRate()),
-		fmt.Sprintf("mirv_streams record name %s", recordPath),
+		fmt.Sprintf(`mirv_streams record name "%s"`, recordPath),
 		"mirv_streams record start",
 	)
 	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"%s\"", first.StartTick, escapeForAddAtTick(joinCommands(startParts...))))
