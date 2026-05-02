@@ -1,7 +1,6 @@
 package hlae
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -74,8 +73,8 @@ func TestBuildUsesPresetAndPovLock(t *testing.T) {
 	if strings.Contains(script, "spec_lock_to_accountid") {
 		t.Fatalf("legacy accountid lock must not be present")
 	}
-	if !strings.Contains(script, `mirv_streams record name \"`) || !strings.Contains(script, `hl_0001_r3_wallbang`) {
-		t.Fatalf("expected quoted directory path record name")
+	if !strings.Contains(script, "mirv_streams record name \\\"highlights/hl_0001_r3_wallbang\\\";") {
+		t.Fatalf("expected quoted forward-slash directory path record name")
 	}
 	if !strings.Contains(script, "mirv_deathmsg filter add attackerMatch=!x76561197960266727 block=1 lastRule=1;") {
 		t.Fatalf("expected killfeed filter for selected steamid")
@@ -178,8 +177,9 @@ func TestBuildHeadshotMontageSingleOutputFile(t *testing.T) {
 	}
 
 	script := builder.BuildHeadshotMontage(result, "headshot_collection")
-	if !strings.Contains(script, `mirv_streams record name \"`) || !strings.Contains(script, `headshot_collection`) {
-		t.Fatalf("expected one output file name for headshot montage")
+	pattern := "mirv_streams record name \\\"highlights/headshot_collection\\\";"
+	if !strings.Contains(script, pattern) {
+		t.Fatalf("expected one output file name for headshot montage, got:\n%s", script)
 	}
 	if strings.Count(script, "mirv_streams record start") != 1 {
 		t.Fatalf("expected exactly one record start for montage")
@@ -224,7 +224,7 @@ func TestResolveRecordPathUsesOutputPathAsDirectory(t *testing.T) {
 	builder.OutputPath = "C:\\recordings"
 
 	got := builder.resolveRecordPath("hl_0001_r3_wallbang")
-	want := filepath.Join("C:\\recordings", "hl_0001_r3_wallbang")
+	want := "C:/recordings/hl_0001_r3_wallbang"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
@@ -246,7 +246,7 @@ func TestResolveRecordPathPreservesDirectoryAsIs(t *testing.T) {
 	builder.OutputPath = "/home/user/recordings"
 
 	got := builder.resolveRecordPath("hl_0001_r3_wallbang")
-	want := filepath.Join("/home/user/recordings", "hl_0001_r3_wallbang")
+	want := "/home/user/recordings/hl_0001_r3_wallbang"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}

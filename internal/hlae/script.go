@@ -384,7 +384,7 @@ func (b *ScriptBuilder) resolveRecordPath(segmentName string) string {
 	if dir == "" {
 		return segmentName
 	}
-	return filepath.Join(dir, segmentName)
+	return strings.ReplaceAll(filepath.Join(dir, segmentName), `\`, `/`)
 }
 
 func (b *ScriptBuilder) buildName(seg recordingSegment) string {
