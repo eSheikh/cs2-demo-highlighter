@@ -73,11 +73,8 @@ func TestBuildUsesPresetAndPovLock(t *testing.T) {
 	if strings.Contains(script, "spec_lock_to_accountid") {
 		t.Fatalf("legacy accountid lock must not be present")
 	}
-	if !strings.Contains(script, "mirv_streams record name hl_0001_r3_wallbang;") {
-		t.Fatalf("expected simple record name without path")
-	}
-	if !strings.Contains(script, "mirv_streams record outputPath highlights;") {
-		t.Fatalf("expected record outputPath command")
+	if !strings.Contains(script, "mirv_streams record name {QUOTE}highlights/hl_0001_r3_wallbang{QUOTE};") {
+		t.Fatalf("expected record name with {QUOTE} and full path")
 	}
 	if !strings.Contains(script, "mirv_deathmsg filter add attackerMatch=!x76561197960266727 block=1 lastRule=1;") {
 		t.Fatalf("expected killfeed filter for selected steamid")
@@ -180,7 +177,7 @@ func TestBuildHeadshotMontageSingleOutputFile(t *testing.T) {
 	}
 
 	script := builder.BuildHeadshotMontage(result, "headshot_collection")
-	if !strings.Contains(script, "mirv_streams record name headshot_collection;") {
+	if !strings.Contains(script, "mirv_streams record name {QUOTE}highlights/headshot_collection{QUOTE};") {
 		t.Fatalf("expected one output file name for headshot montage")
 	}
 	if strings.Count(script, "mirv_streams record start") != 1 {
@@ -221,9 +218,20 @@ func TestHelpersUseStableFallbacks(t *testing.T) {
 	}
 }
 
-func TestResolveRecordPathReturnsSegmentName(t *testing.T) {
+func TestResolveRecordPathReturnsFullPath(t *testing.T) {
 	builder := NewScriptBuilder()
 	builder.OutputPath = "C:\\recordings"
+
+	got := builder.resolveRecordPath("hl_0001_r3_wallbang")
+	want := "C:/recordings/hl_0001_r3_wallbang"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestResolveRecordPathEmptyOutputPath(t *testing.T) {
+	builder := NewScriptBuilder()
+	builder.OutputPath = ""
 
 	got := builder.resolveRecordPath("hl_0001_r3_wallbang")
 	want := "hl_0001_r3_wallbang"
@@ -232,23 +240,12 @@ func TestResolveRecordPathReturnsSegmentName(t *testing.T) {
 	}
 }
 
-func TestResolveOutputPathUsesForwardSlashes(t *testing.T) {
+func TestResolveRecordPathPreservesDirectoryAsIs(t *testing.T) {
 	builder := NewScriptBuilder()
-	builder.OutputPath = "C:\\recordings"
+	builder.OutputPath = "/home/user/recordings"
 
-	got := builder.resolveOutputPath()
-	want := "C:/recordings"
-	if got != want {
-		t.Fatalf("expected %q, got %q", want, got)
-	}
-}
-
-func TestResolveOutputPathEmptyDefaultsToDot(t *testing.T) {
-	builder := NewScriptBuilder()
-	builder.OutputPath = ""
-
-	got := builder.resolveOutputPath()
-	want := "."
+	got := builder.resolveRecordPath("hl_0001_r3_wallbang")
+	want := "/home/user/recordings/hl_0001_r3_wallbang"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}

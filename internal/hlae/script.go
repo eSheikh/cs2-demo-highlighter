@@ -3,6 +3,7 @@ package hlae
 import (
 	"cmp"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -173,7 +174,6 @@ func (b *ScriptBuilder) writeSetup(w *strings.Builder, steamID string) {
 	writeCommandLine(w, "mirv_cvar_unhide_all")
 	writeCommandLine(w, "mirv_cmd clear")
 	writeCommandLine(w, "mirv_streams record end")
-	writeCommandLine(w, fmt.Sprintf("mirv_streams record outputPath %s", b.resolveOutputPath()))
 	writeCommandLine(w, fmt.Sprintf("mirv_streams settings edit afxDefault settings %s", b.ffmpegPreset()))
 	writeCommandLine(w, "mirv_streams record screen enabled 1")
 	writeCommandLine(w, fmt.Sprintf("mirv_streams record fps %d", b.frameRate()))
@@ -203,7 +203,7 @@ func (b *ScriptBuilder) writeTickCommands(w *strings.Builder, segs []recordingSe
 		recordPath := b.resolveRecordPath(seg.Name)
 		startParts := append(povCommandsBySlot(seg.PlayerSlot),
 			fmt.Sprintf("host_framerate %d", b.frameRate()),
-			fmt.Sprintf("mirv_streams record name %s", recordPath),
+			fmt.Sprintf("mirv_streams record name {QUOTE}%s{QUOTE}", recordPath),
 			"mirv_streams record start",
 		)
 		startCmd := joinCommands(startParts...)
@@ -243,7 +243,7 @@ func (b *ScriptBuilder) writeHeadshotMontageCommands(w *strings.Builder, segs []
 
 	startParts := append(povCommandsBySlot(first.PlayerSlot),
 		fmt.Sprintf("host_framerate %d", b.frameRate()),
-		fmt.Sprintf("mirv_streams record name %s", recordPath),
+		fmt.Sprintf("mirv_streams record name {QUOTE}%s{QUOTE}", recordPath),
 		"mirv_streams record start",
 	)
 	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"%s\"", first.StartTick, escapeForAddAtTick(joinCommands(startParts...))))
@@ -379,16 +379,12 @@ func (b *ScriptBuilder) ffmpegPreset() string {
 	return cmp.Or(sanitizePresetToken(b.FFmpegPreset), defaultPreset)
 }
 
-func (b *ScriptBuilder) resolveOutputPath() string {
+func (b *ScriptBuilder) resolveRecordPath(segmentName string) string {
 	dir := strings.TrimSpace(b.OutputPath)
 	if dir == "" {
-		return "."
+		return segmentName
 	}
-	return strings.ReplaceAll(dir, `\`, `/`)
-}
-
-func (b *ScriptBuilder) resolveRecordPath(segmentName string) string {
-	return segmentName
+	return strings.ReplaceAll(filepath.Join(dir, segmentName), `\`, `/`)
 }
 
 func (b *ScriptBuilder) buildName(seg recordingSegment) string {
