@@ -22,7 +22,7 @@ func NewParser() *Parser {
 	return &Parser{}
 }
 
-func (p *Parser) Parse(ctx context.Context, demoPath string, steamID string) (model.ParsedDemo, error) {
+func (p *Parser) Parse(ctx context.Context, demoPath string, steamID string) (result model.ParsedDemo, err error) {
 	if err := demo.ValidatePath(demoPath); err != nil {
 		return model.ParsedDemo{}, err
 	}
@@ -31,16 +31,24 @@ func (p *Parser) Parse(ctx context.Context, demoPath string, steamID string) (mo
 	if err != nil {
 		return model.ParsedDemo{}, fmt.Errorf("open demo file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close file: %w", cerr)
+		}
+	}()
 
 	parser := demoparser.NewParser(file)
-	defer parser.Close()
+	defer func() {
+		if cerr := parser.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close parser: %w", cerr)
+		}
+	}()
 
-	result := newParsedDemo(demoPath)
+	result = newParsedDemo(demoPath)
 	roundWinners := make(map[int]common.Team)
 	registerHandlers(parser, steamID, &result, roundWinners)
 
-	if err := parseDemo(ctx, parser); err != nil {
+	if err = parseDemo(ctx, parser); err != nil {
 		return model.ParsedDemo{}, err
 	}
 	if result.TickRate <= 0 {
