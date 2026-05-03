@@ -3,8 +3,10 @@ package hlae
 import (
 	"cmp"
 	"fmt"
+	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
@@ -175,6 +177,11 @@ func (b *ScriptBuilder) writeSetup(w *strings.Builder, steamID string) {
 	writeCommandLine(w, "mirv_streams record end")
 	dir := strings.TrimSpace(b.OutputPath)
 	if dir != "" {
+		dir = path.Join(
+			dir,
+			sanitizeNameToken(steamID),
+			time.Now().Format("2006-01-02"),
+		)
 		writeCommandLine(w, fmt.Sprintf(`mirv_streams record name "%s"`, dir))
 	}
 	writeCommandLine(w, fmt.Sprintf("mirv_streams settings edit afxDefault settings %s", b.ffmpegPreset()))
