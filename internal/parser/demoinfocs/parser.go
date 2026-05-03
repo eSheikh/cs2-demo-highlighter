@@ -31,11 +31,6 @@ func (p *Parser) Parse(ctx context.Context, demoPath string, steamID string) (re
 	if err != nil {
 		return model.ParsedDemo{}, fmt.Errorf("open demo file: %w", err)
 	}
-	defer func() {
-		if cerr := file.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("close file: %w", cerr)
-		}
-	}()
 
 	parser := demoparser.NewParser(file)
 	defer func() {
