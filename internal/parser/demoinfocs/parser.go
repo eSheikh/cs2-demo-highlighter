@@ -74,9 +74,10 @@ func registerHandlers(
 
 	// TotalRoundsPlayed() is already incremented by the time RoundEnd fires, so
 	// snapshot it at RoundStart to key kills and the winner under the same round.
+	// +1 makes the stored round human-facing (round 1 instead of 0).
 	currentRound := 0
 	parser.RegisterEventHandler(func(e events.RoundStart) {
-		currentRound = parser.GameState().TotalRoundsPlayed()
+		currentRound = parser.GameState().TotalRoundsPlayed() + 1
 	})
 
 	parser.RegisterEventHandler(func(e events.RoundEnd) {

@@ -53,8 +53,6 @@ func (b *ScriptBuilder) ApplyOffsetsSeconds(tickRate float64, preRollSeconds int
 }
 
 type recordingSegment struct {
-	Index      int
-	Name       string
 	PlayerSlot int
 	StartTick  int
 	EndTick    int
@@ -89,7 +87,7 @@ func (b *ScriptBuilder) BuildHeadshotMontage(result model.HighlightResult, monta
 	segs := b.resolveHeadshotSegments(result)
 
 	b.writeSetup(&w, result.SteamID)
-	b.writeHeadshotMontageCommands(&w, segs, montageName)
+	b.writeHeadshotMontageCommands(&w, segs)
 	b.writeHeadshotMontageFooter(&w, segs, montageName)
 
 	return w.String()
@@ -153,11 +151,6 @@ func (b *ScriptBuilder) resolveSegmentsFromHighlights(highlights []model.Highlig
 			EndTick:    item.EndTick,
 			Highlights: []model.Highlight{item.Highlight},
 		})
-	}
-
-	for i := range segments {
-		segments[i].Index = i + 1
-		segments[i].Name = b.buildName(segments[i])
 	}
 
 	return segments
@@ -237,10 +230,10 @@ func (b *ScriptBuilder) writeTickCommands(w *strings.Builder, segs []recordingSe
 	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"disconnect\"", lastTick+1))
 	w.WriteString("\n")
 
-	b.writeInitialSeek(w, segs[0], "Auto-seek to first segment", true)
+	b.writeInitialSeek(w, segs[0], "Auto-seek to first segment")
 }
 
-func (b *ScriptBuilder) writeHeadshotMontageCommands(w *strings.Builder, segs []recordingSegment, montageName string) {
+func (b *ScriptBuilder) writeHeadshotMontageCommands(w *strings.Builder, segs []recordingSegment) {
 	if len(segs) == 0 {
 		writeCommandLine(w, "echo \"No headshot highlights found.\"")
 		return
@@ -271,7 +264,7 @@ func (b *ScriptBuilder) writeHeadshotMontageCommands(w *strings.Builder, segs []
 	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"disconnect\"", last.EndTick+2))
 	w.WriteString("\n")
 
-	b.writeInitialSeek(w, first, "Auto-seek to first headshot segment", true)
+	b.writeInitialSeek(w, first, "Auto-seek to first headshot segment")
 }
 
 func (b *ScriptBuilder) writeHeadshotMontageFooter(w *strings.Builder, segs []recordingSegment, montageName string) {
@@ -366,12 +359,10 @@ func (b *ScriptBuilder) resolveIntraSegmentJumps(seg recordingSegment) []recordi
 	return filtered
 }
 
-func (b *ScriptBuilder) writeInitialSeek(w *strings.Builder, seg recordingSegment, label string, withWarmup bool) {
+func (b *ScriptBuilder) writeInitialSeek(w *strings.Builder, seg recordingSegment, label string) {
 	firstSeek := seekTickBefore(seg.StartTick)
 	writeCommandLine(w, fmt.Sprintf("echo \"%s: tick %d\"", label, firstSeek))
-	if withWarmup {
-		writeCommandLine(w, joinCommands("demo_resume", fmt.Sprintf("wait %d", b.frameRate())))
-	}
+	writeCommandLine(w, joinCommands("demo_resume", fmt.Sprintf("wait %d", b.frameRate())))
 	writeCommandLine(w, buildSeekJumpCommand(firstSeek, seg.PlayerSlot))
 	w.WriteString("\n")
 }
@@ -382,21 +373,6 @@ func (b *ScriptBuilder) frameRate() int {
 
 func (b *ScriptBuilder) ffmpegPreset() string {
 	return cmp.Or(sanitizePresetToken(b.FFmpegPreset), defaultPreset)
-}
-
-func (b *ScriptBuilder) buildName(seg recordingSegment) string {
-	if len(seg.Highlights) == 0 {
-		return fmt.Sprintf("hl_%04d", seg.Index)
-	}
-	first := seg.Highlights[0]
-	typeToken := sanitizeNameToken(string(first.Type))
-	if typeToken == "" {
-		typeToken = "highlight"
-	}
-	if len(seg.Highlights) > 1 {
-		typeToken = "cluster_" + typeToken
-	}
-	return fmt.Sprintf("hl_%04d_r%d_%s", seg.Index, first.Round, typeToken)
 }
 
 func sanitizeNameToken(value string) string {
