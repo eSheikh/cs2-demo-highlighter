@@ -6,6 +6,7 @@ import (
 	"flag"
 	"log"
 
+	"github.com/eSheikh/cs2-demo-highlighter/internal/engine"
 	"github.com/eSheikh/cs2-demo-highlighter/internal/hlae"
 	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 	"github.com/eSheikh/cs2-demo-highlighter/internal/parser/demoinfocs"
@@ -22,12 +23,12 @@ func Run(ctx context.Context, args []string, logger *log.Logger) error {
 		return err
 	}
 
-	orchestrator := service.NewOrchestrator(
+	eng := engine.New(
 		demoinfocs.NewParser(),
 		service.NewHighlightService(),
 	)
 
-	result, err := orchestrator.Build(ctx, cfg.DemoPath, cfg.SteamID)
+	result, err := eng.Extract(ctx, cfg.DemoPath, cfg.SteamID, nil)
 	if err != nil {
 		return err
 	}

@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"time"
 
 	demoparser "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs"
 	"github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/common"
@@ -16,13 +19,32 @@ import (
 	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
 
+const progressThrottle = 150 * time.Millisecond
+
+// countingReader tracks bytes read so parse progress can be derived from the
+// file position. CS2 demo headers do not carry a frame count, so the parser's
+// own Progress() stays at 0 — byte position is the reliable signal.
+type countingReader struct {
+	r    io.Reader
+	read int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.read += int64(n)
+	return n, err
+}
+
 type Parser struct{}
 
 func NewParser() *Parser {
 	return &Parser{}
 }
 
-func (p *Parser) Parse(ctx context.Context, demoPath string, steamID string) (result model.ParsedDemo, err error) {
+// Parse extracts kills for steamID from the demo. onProgress, if non-nil, is
+// called with a 0..1 fraction as parsing advances; it runs on the parsing
+// goroutine, so it must not block.
+func (p *Parser) Parse(ctx context.Context, demoPath string, steamID string, onProgress func(float64)) (result model.ParsedDemo, err error) {
 	if err := demo.ValidatePath(demoPath); err != nil {
 		return model.ParsedDemo{}, err
 	}
@@ -32,7 +54,9 @@ func (p *Parser) Parse(ctx context.Context, demoPath string, steamID string) (re
 		return model.ParsedDemo{}, fmt.Errorf("open demo file: %w", err)
 	}
 
-	parser := demoparser.NewParser(file)
+	size := statSize(file)
+	counter := &countingReader{r: file}
+	parser := demoparser.NewParser(counter)
 	defer func() {
 		if cerr := parser.Close(); cerr != nil && err == nil {
 			err = fmt.Errorf("close parser: %w", cerr)
@@ -42,6 +66,7 @@ func (p *Parser) Parse(ctx context.Context, demoPath string, steamID string) (re
 	result = newParsedDemo(demoPath)
 	roundWinners := make(map[int]common.Team)
 	registerHandlers(parser, steamID, &result, roundWinners)
+	registerProgress(parser, func() float64 { return readFraction(counter.read, size) }, onProgress)
 
 	if err = parseDemo(ctx, parser); err != nil {
 		return model.ParsedDemo{}, err
@@ -50,8 +75,118 @@ func (p *Parser) Parse(ctx context.Context, demoPath string, steamID string) (re
 		result.TickRate = parser.TickRate()
 	}
 	applyRoundWinners(result.Kills, roundWinners)
+	if onProgress != nil {
+		onProgress(1)
+	}
 
 	return result, nil
+}
+
+// Roster lists the players in the demo. It parses only until team sides are
+// locked (first freezetime end) and then cancels, so it is cheap relative to a
+// full parse.
+func (p *Parser) Roster(ctx context.Context, demoPath string) (players []model.Player, err error) {
+	if err := demo.ValidatePath(demoPath); err != nil {
+		return nil, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	file, err := os.Open(demoPath)
+	if err != nil {
+		return nil, fmt.Errorf("open demo file: %w", err)
+	}
+
+	parser := demoparser.NewParser(file)
+	defer func() {
+		if cerr := parser.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close parser: %w", cerr)
+		}
+	}()
+
+	seen := make(map[uint64]string)
+	collect := func() {
+		for _, player := range parser.GameState().Participants().Playing() {
+			if player == nil || player.SteamID64 == 0 {
+				continue
+			}
+			seen[player.SteamID64] = player.Name
+		}
+	}
+	parser.RegisterEventHandler(func(events.RoundFreezetimeEnd) {
+		collect()
+		parser.Cancel()
+	})
+
+	stopCancelWatcher := context.AfterFunc(ctx, parser.Cancel)
+	defer stopCancelWatcher()
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("demo parser panicked on invalid input: %v", recovered)
+		}
+	}()
+
+	parseErr := parser.ParseToEnd()
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("roster parsing cancelled: %w", ctx.Err())
+	}
+	if parseErr != nil && !errors.Is(parseErr, demoparser.ErrCancelled) {
+		return nil, fmt.Errorf("demo parsing failed: %w", parseErr)
+	}
+	if len(seen) == 0 {
+		collect()
+	}
+
+	return sortedPlayers(seen), nil
+}
+
+func registerProgress(parser demoparser.Parser, fraction func() float64, onProgress func(float64)) {
+	if onProgress == nil {
+		return
+	}
+	var lastEmit time.Time
+	parser.RegisterEventHandler(func(events.FrameDone) {
+		now := time.Now()
+		if now.Sub(lastEmit) < progressThrottle {
+			return
+		}
+		lastEmit = now
+		onProgress(fraction())
+	})
+}
+
+func statSize(file *os.File) int64 {
+	info, err := file.Stat()
+	if err != nil {
+		return 0
+	}
+	return info.Size()
+}
+
+func readFraction(read int64, size int64) float64 {
+	if size <= 0 {
+		return 0
+	}
+	return min(float64(read)/float64(size), 1)
+}
+
+func sortedPlayers(seen map[uint64]string) []model.Player {
+	players := make([]model.Player, 0, len(seen))
+	for id, name := range seen {
+		players = append(players, model.Player{SteamID: steamIDFromUint64(id), Name: name})
+	}
+	sort.Slice(players, func(i, j int) bool {
+		if players[i].Name == players[j].Name {
+			return players[i].SteamID < players[j].SteamID
+		}
+		return players[i].Name < players[j].Name
+	})
+	return players
 }
 
 func newParsedDemo(demoPath string) model.ParsedDemo {

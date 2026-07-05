@@ -66,3 +66,8 @@ type ParsedDemo struct {
 	TickRate float64
 	Kills    []KillEvent
 }
+
+type Player struct {
+	SteamID string
+	Name    string
+}

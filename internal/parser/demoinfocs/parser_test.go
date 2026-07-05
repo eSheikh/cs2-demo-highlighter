@@ -20,7 +20,7 @@ func TestParseRejectsNonDemoExtension(t *testing.T) {
 		t.Fatalf("write input: %v", err)
 	}
 
-	_, err := NewParser().Parse(context.Background(), path, "76561197960265728")
+	_, err := NewParser().Parse(context.Background(), path, "76561197960265728", nil)
 	if err == nil {
 		t.Fatalf("expected error for non-.dem file, got nil")
 	}
@@ -38,7 +38,7 @@ func TestParseHandlesInvalidDemoData(t *testing.T) {
 		t.Fatalf("write demo: %v", err)
 	}
 
-	_, err := NewParser().Parse(context.Background(), path, "76561197960265728")
+	_, err := NewParser().Parse(context.Background(), path, "76561197960265728", nil)
 	if err == nil {
 		t.Fatalf("expected parse error for invalid .dem payload, got nil")
 	}
@@ -59,7 +59,7 @@ func TestParseHonorsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := NewParser().Parse(ctx, path, "76561197960265728")
+	_, err := NewParser().Parse(ctx, path, "76561197960265728", nil)
 	if err == nil {
 		t.Fatalf("expected context cancellation error, got nil")
 	}
