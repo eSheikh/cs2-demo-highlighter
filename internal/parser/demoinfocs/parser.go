@@ -72,8 +72,15 @@ func registerHandlers(
 		result.TickRate = e.TickRate
 	})
 
+	// TotalRoundsPlayed() is already incremented by the time RoundEnd fires, so
+	// snapshot it at RoundStart to key kills and the winner under the same round.
+	currentRound := 0
+	parser.RegisterEventHandler(func(e events.RoundStart) {
+		currentRound = parser.GameState().TotalRoundsPlayed()
+	})
+
 	parser.RegisterEventHandler(func(e events.RoundEnd) {
-		roundWinners[parser.GameState().TotalRoundsPlayed()] = e.Winner
+		roundWinners[currentRound] = e.Winner
 	})
 
 	parser.RegisterEventHandler(func(e events.Kill) {
@@ -81,7 +88,7 @@ func registerHandlers(
 			return
 		}
 
-		kill, ok := buildKillEvent(parser, steamID, e)
+		kill, ok := buildKillEvent(parser, steamID, currentRound, e)
 		if !ok {
 			return
 		}
@@ -89,8 +96,14 @@ func registerHandlers(
 	})
 }
 
-func buildKillEvent(parser demoparser.Parser, steamID string, e events.Kill) (model.KillEvent, bool) {
+func buildKillEvent(parser demoparser.Parser, steamID string, round int, e events.Kill) (model.KillEvent, bool) {
 	if e.Killer == nil || e.Victim == nil {
+		return model.KillEvent{}, false
+	}
+	if e.Killer == e.Victim {
+		return model.KillEvent{}, false
+	}
+	if e.Killer.Team == e.Victim.Team {
 		return model.KillEvent{}, false
 	}
 	if steamIDFromUint64(e.Killer.SteamID64) != steamID {
@@ -108,7 +121,7 @@ func buildKillEvent(parser demoparser.Parser, steamID string, e events.Kill) (mo
 	return model.KillEvent{
 		Tick:       parser.GameState().IngameTick(),
 		Time:       parser.CurrentTime(),
-		Round:      parser.GameState().TotalRoundsPlayed(),
+		Round:      round,
 		KillerID:   steamIDFromUint64(e.Killer.SteamID64),
 		KillerSlot: killerSlotFromPlayer(e.Killer),
 		VictimID:   steamIDFromUint64(e.Victim.SteamID64),

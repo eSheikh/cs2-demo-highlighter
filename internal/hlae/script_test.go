@@ -1,11 +1,23 @@
 package hlae
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
+
+// Date segment is generated at runtime, hence a pattern rather than a fixed string.
+func assertSetupRecordName(t *testing.T, script, output, steamID string) {
+	t.Helper()
+	pattern := regexp.MustCompile(
+		`mirv_streams record name "` + regexp.QuoteMeta(output+"/"+steamID+"/") + `\d{4}-\d{2}-\d{2}";`,
+	)
+	if !pattern.MatchString(script) {
+		t.Fatalf("expected record name %q/%q/<date> in setup, got script:\n%s", output, steamID, script)
+	}
+}
 
 func TestResolveSegmentsMergesOverlap(t *testing.T) {
 	builder := NewScriptBuilder()
@@ -73,9 +85,7 @@ func TestBuildUsesPresetAndPovLock(t *testing.T) {
 	if strings.Contains(script, "spec_lock_to_accountid") {
 		t.Fatalf("legacy accountid lock must not be present")
 	}
-	if !strings.Contains(script, `mirv_streams record name "highlights";`) {
-		t.Fatalf("expected record name with output path in setup")
-	}
+	assertSetupRecordName(t, script, "highlights", "76561197960266727")
 	if !strings.Contains(script, "mirv_deathmsg filter add attackerMatch=!x76561197960266727 block=1 lastRule=1;") {
 		t.Fatalf("expected killfeed filter for selected steamid")
 	}
@@ -177,9 +187,7 @@ func TestBuildHeadshotMontageSingleOutputFile(t *testing.T) {
 	}
 
 	script := builder.BuildHeadshotMontage(result, "headshot_collection")
-	if !strings.Contains(script, `mirv_streams record name "highlights";`) {
-		t.Fatalf("expected record name with output path in setup")
-	}
+	assertSetupRecordName(t, script, "highlights", "76561197960266727")
 	if strings.Count(script, "mirv_streams record start") != 1 {
 		t.Fatalf("expected exactly one record start for montage")
 	}
