@@ -3,15 +3,16 @@ package tui
 import "github.com/charmbracelet/lipgloss"
 
 const (
-	accent = lipgloss.Color("205")
-	subtle = lipgloss.Color("241")
-	good   = lipgloss.Color("42")
-	bad    = lipgloss.Color("196")
-	light  = lipgloss.Color("231")
+	accent     = lipgloss.Color("45") // neon blue, foreground accents
+	accentDeep = lipgloss.Color("27") // darker blue, filled backgrounds
+	subtle     = lipgloss.Color("241")
+	good       = lipgloss.Color("42")
+	bad        = lipgloss.Color("196")
+	light      = lipgloss.Color("231")
 )
 
 var (
-	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(light).Background(accent).Padding(0, 1)
+	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(light).Background(accentDeep).Padding(0, 1)
 	stepStyle   = lipgloss.NewStyle().Foreground(light).Background(lipgloss.Color("238")).Padding(0, 1)
 	footerStyle = lipgloss.NewStyle().Foreground(subtle).Padding(0, 1)
 	bodyStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(1, 2)
@@ -22,8 +23,13 @@ var (
 	okStyle       = lipgloss.NewStyle().Foreground(good)
 	errStyle      = lipgloss.NewStyle().Foreground(bad)
 	selectedStyle = lipgloss.NewStyle().Foreground(accent).Bold(true)
-	activeTab     = lipgloss.NewStyle().Foreground(light).Background(accent).Padding(0, 1)
+	activeTab     = lipgloss.NewStyle().Foreground(light).Background(accentDeep).Padding(0, 1)
 	inactiveTab   = lipgloss.NewStyle().Foreground(subtle).Padding(0, 1)
+
+	spinnerStyle     = lipgloss.NewStyle().Foreground(accent)
+	teamLabelStyle   = lipgloss.NewStyle().Bold(true).Foreground(accent)
+	playerCellStyle  = lipgloss.NewStyle().Padding(0, 1)
+	playerFocusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(light).Background(accentDeep)
 )
 
 // chrome frames a body between a header bar and a footer/help line, sized to the

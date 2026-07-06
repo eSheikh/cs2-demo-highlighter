@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	"github.com/charmbracelet/bubbles/filepicker"
-	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -51,14 +50,11 @@ func newModel(eng *engine.Engine, demoArg string) appModel {
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
+	sp.Style = spinnerStyle
 
 	out := textinput.New()
 	out.SetValue("clips")
 	out.CharLimit = 64
-
-	players := list.New(nil, list.NewDefaultDelegate(), 0, 0)
-	players.Title = "Players"
-	players.SetShowHelp(false)
 
 	m := appModel{
 		eng:      eng,
@@ -66,8 +62,7 @@ func newModel(eng *engine.Engine, demoArg string) appModel {
 		options:  defaultOptions(),
 		picker:   fp,
 		spin:     sp,
-		players:  players,
-		progress: progress.New(progress.WithDefaultGradient()),
+		progress: progress.New(progress.WithGradient("#005fff", "#00d7ff")),
 		output:   out,
 		mode:     hlae.ModeClips,
 	}
@@ -123,12 +118,6 @@ type typeCount struct {
 	Enabled bool
 }
 
-type playerItem struct{ player model.Player }
-
-func (i playerItem) Title() string       { return i.player.Name }
-func (i playerItem) Description() string  { return i.player.SteamID }
-func (i playerItem) FilterValue() string { return i.player.Name }
-
 type appModel struct {
 	eng     *engine.Engine
 	state   state
@@ -138,9 +127,12 @@ type appModel struct {
 
 	picker   filepicker.Model
 	spin     spinner.Model
-	players  list.Model
 	progress progress.Model
 	output   textinput.Model
+
+	roster    [][]model.Player
+	rosterRow int
+	rosterCol int
 
 	demoPath string
 	err      error
@@ -238,11 +230,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.err = nil
-		items := make([]list.Item, len(msg.players))
-		for i, p := range msg.players {
-			items[i] = playerItem{player: p}
-		}
-		m.players.SetItems(items)
+		m.roster = groupByTeam(msg.players)
+		m.rosterRow, m.rosterCol = 0, 0
 		m.state = stateRoster
 		return m, nil
 	case extractEvent:
@@ -278,7 +267,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *appModel) applySizes() {
 	m.picker.SetHeight(max(m.height-8, 3))
-	m.players.SetSize(max(m.width-6, 10), max(m.height-8, 3))
 	m.progress.Width = min(max(m.width-12, 20), 60)
 	m.output.Width = 24
 }
@@ -296,27 +284,69 @@ func (m appModel) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m appModel) updateRoster(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if key, ok := msg.(tea.KeyMsg); ok && m.players.FilterState() != list.Filtering {
-		switch key.String() {
-		case "q":
-			return m, tea.Quit
-		case "enter":
-			if item, ok := m.players.SelectedItem().(playerItem); ok {
-				m.events = make(chan extractEvent, 32)
-				m.fraction = 0
-				m.err = nil
-				m.state = stateParsing
-				return m, tea.Batch(
-					m.spin.Tick,
-					startExtract(m.eng, m.demoPath, item.player.SteamID, m.events),
-					waitExtract(m.events),
-				)
-			}
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch key.String() {
+	case "q", "esc":
+		return m, tea.Quit
+	case "left", "h":
+		if m.rosterCol > 0 {
+			m.rosterCol--
+		}
+	case "right", "l":
+		if m.rosterCol < len(m.roster[m.rosterRow])-1 {
+			m.rosterCol++
+		}
+	case "up", "k":
+		if m.rosterRow > 0 {
+			m.rosterRow--
+			m.rosterCol = min(m.rosterCol, len(m.roster[m.rosterRow])-1)
+		}
+	case "down", "j":
+		if m.rosterRow < len(m.roster)-1 {
+			m.rosterRow++
+			m.rosterCol = min(m.rosterCol, len(m.roster[m.rosterRow])-1)
+		}
+	case "enter":
+		player := m.roster[m.rosterRow][m.rosterCol]
+		m.events = make(chan extractEvent, 32)
+		m.fraction = 0
+		m.err = nil
+		m.state = stateParsing
+		return m, tea.Batch(
+			m.spin.Tick,
+			startExtract(m.eng, m.demoPath, player.SteamID, m.events),
+			waitExtract(m.events),
+		)
+	}
+	return m, nil
+}
+
+// groupByTeam splits the roster into display rows: CT side first, then T,
+// then anyone whose side is unknown. Empty rows are dropped, so the grid
+// always indexes into non-empty slices.
+func groupByTeam(players []model.Player) [][]model.Player {
+	bySide := make(map[string][]model.Player)
+	for _, p := range players {
+		bySide[p.Team] = append(bySide[p.Team], p)
+	}
+	rows := make([][]model.Player, 0, 3)
+	for _, side := range []string{"CT", "T", ""} {
+		if len(bySide[side]) > 0 {
+			rows = append(rows, bySide[side])
 		}
 	}
-	var cmd tea.Cmd
-	m.players, cmd = m.players.Update(msg)
-	return m, cmd
+	return rows
+}
+
+func teamLabel(row []model.Player, index int) string {
+	label := fmt.Sprintf("Team %d", index+1)
+	if side := row[0].Team; side != "" {
+		label += " · " + side
+	}
+	return label
 }
 
 func (m appModel) updateResults(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -428,8 +458,8 @@ func (m appModel) View() string {
 		return chrome(m.width, m.height, "2/4  Player", m.spin.View()+" reading roster…",
 			"ctrl+c quit")
 	case stateRoster:
-		return chrome(m.width, m.height, "2/4  Player", m.players.View(),
-			"↑/↓ move   / filter   enter parse   ctrl+c quit")
+		return chrome(m.width, m.height, "2/4  Player", m.bodyRoster(),
+			"←/→ player   ↑/↓ team   enter parse   q quit")
 	case stateParsing:
 		return chrome(m.width, m.height, "3/4  Parsing", m.bodyParsing(),
 			"parsing…   ctrl+c quit")
@@ -447,6 +477,52 @@ func (m appModel) bodyPicker() string {
 		s += "\n\n" + errStyle.Render("error: "+m.err.Error())
 	}
 	return s
+}
+
+func (m appModel) bodyRoster() string {
+	s := titleStyle.Render("Select a player") + "\n"
+	s += dimStyle.Render(filepath.Base(m.demoPath)) + "\n"
+
+	cellWidth := rosterCellWidth(m.roster)
+	for row, players := range m.roster {
+		s += "\n" + teamLabelStyle.Render(teamLabel(players, row)) + "\n"
+		line := ""
+		for col, p := range players {
+			style := playerCellStyle
+			if row == m.rosterRow && col == m.rosterCol {
+				style = playerFocusStyle
+			}
+			line += style.Width(cellWidth).Render(truncateName(p.Name, cellWidth-2))
+		}
+		s += line + "\n"
+	}
+
+	selected := m.roster[m.rosterRow][m.rosterCol]
+	s += "\n" + dimStyle.Render("SteamID  "+selected.SteamID)
+	return s
+}
+
+// rosterCellWidth sizes every cell to the longest name so rows align as
+// columns, capped so a full 5-player row still fits an 80-column terminal.
+func rosterCellWidth(rows [][]model.Player) int {
+	const maxCell = 16
+	width := 8
+	for _, row := range rows {
+		for _, p := range row {
+			if w := len([]rune(p.Name)) + 2; w > width {
+				width = w
+			}
+		}
+	}
+	return min(width, maxCell)
+}
+
+func truncateName(name string, width int) string {
+	runes := []rune(name)
+	if len(runes) <= width {
+		return name
+	}
+	return string(runes[:width-1]) + "…"
 }
 
 func (m appModel) bodyParsing() string {

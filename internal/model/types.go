@@ -92,4 +92,7 @@ type ParsedDemo struct {
 type Player struct {
 	SteamID string
 	Name    string
+	// Team is the side the player was on when the roster was captured
+	// (first freezetime): "CT", "T", or "" when unknown.
+	Team string
 }

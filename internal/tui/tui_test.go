@@ -24,6 +24,73 @@ func sampleResult() model.HighlightResult {
 	}
 }
 
+func sampleRoster() []model.Player {
+	return []model.Player{
+		{SteamID: "1", Name: "alpha", Team: "CT"},
+		{SteamID: "2", Name: "bravo", Team: "CT"},
+		{SteamID: "3", Name: "charlie", Team: "T"},
+		{SteamID: "4", Name: "delta", Team: "T"},
+		{SteamID: "5", Name: "echo", Team: "T"},
+	}
+}
+
+func TestGroupByTeamRowsCTFirst(t *testing.T) {
+	rows := groupByTeam(sampleRoster())
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	if len(rows[0]) != 2 || rows[0][0].Team != "CT" {
+		t.Fatalf("expected CT row first, got %+v", rows[0])
+	}
+	if len(rows[1]) != 3 || rows[1][0].Team != "T" {
+		t.Fatalf("expected T row second, got %+v", rows[1])
+	}
+}
+
+func TestGroupByTeamUnknownSidesStillListed(t *testing.T) {
+	rows := groupByTeam([]model.Player{{SteamID: "1", Name: "a"}, {SteamID: "2", Name: "b"}})
+	if len(rows) != 1 || len(rows[0]) != 2 {
+		t.Fatalf("expected one row with 2 players, got %+v", rows)
+	}
+}
+
+func TestRosterNavigationClampsAcrossRows(t *testing.T) {
+	m := appModel{state: stateRoster, roster: groupByTeam(sampleRoster())}
+
+	press := func(key string) {
+		updated, _ := m.updateRoster(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
+		m = updated.(appModel)
+	}
+
+	press("l")
+	press("l") // CT row has 2 players; second press must clamp
+	if m.rosterCol != 1 {
+		t.Fatalf("expected col clamped to 1, got %d", m.rosterCol)
+	}
+	press("j")
+	if m.rosterRow != 1 || m.rosterCol != 1 {
+		t.Fatalf("expected row 1 col 1, got row %d col %d", m.rosterRow, m.rosterCol)
+	}
+	press("l")
+	press("k") // back to CT row: col must clamp from 2 to 1
+	if m.rosterRow != 0 || m.rosterCol != 1 {
+		t.Fatalf("expected row 0 col 1, got row %d col %d", m.rosterRow, m.rosterCol)
+	}
+}
+
+func TestRosterEnterStartsParsing(t *testing.T) {
+	m := appModel{state: stateRoster, roster: groupByTeam(sampleRoster())}
+	updated, cmd := m.updateRoster(tea.KeyMsg{Type: tea.KeyEnter})
+	got := updated.(appModel)
+
+	if got.state != stateParsing {
+		t.Fatalf("expected parsing state, got %d", got.state)
+	}
+	if cmd == nil {
+		t.Fatalf("expected extract command")
+	}
+}
+
 func TestCountTypesOrdersAndCounts(t *testing.T) {
 	types := countTypes(sampleResult())
 	if len(types) != 2 {

@@ -108,13 +108,17 @@ func (p *Parser) Roster(ctx context.Context, demoPath string) (players []model.P
 		}
 	}()
 
-	seen := make(map[uint64]string)
+	seen := make(map[uint64]model.Player)
 	collect := func() {
 		for _, player := range parser.GameState().Participants().Playing() {
 			if player == nil || player.SteamID64 == 0 {
 				continue
 			}
-			seen[player.SteamID64] = player.Name
+			seen[player.SteamID64] = model.Player{
+				SteamID: steamIDFromUint64(player.SteamID64),
+				Name:    player.Name,
+				Team:    teamSide(player.Team),
+			}
 		}
 	}
 	parser.RegisterEventHandler(func(events.RoundFreezetimeEnd) {
@@ -175,10 +179,21 @@ func readFraction(read int64, size int64) float64 {
 	return min(float64(read)/float64(size), 1)
 }
 
-func sortedPlayers(seen map[uint64]string) []model.Player {
+func teamSide(team common.Team) string {
+	switch team {
+	case common.TeamCounterTerrorists:
+		return "CT"
+	case common.TeamTerrorists:
+		return "T"
+	default:
+		return ""
+	}
+}
+
+func sortedPlayers(seen map[uint64]model.Player) []model.Player {
 	players := make([]model.Player, 0, len(seen))
-	for id, name := range seen {
-		players = append(players, model.Player{SteamID: steamIDFromUint64(id), Name: name})
+	for _, p := range seen {
+		players = append(players, p)
 	}
 	sort.Slice(players, func(i, j int) bool {
 		if players[i].Name == players[j].Name {
