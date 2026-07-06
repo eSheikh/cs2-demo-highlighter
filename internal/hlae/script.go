@@ -71,40 +71,32 @@ type recordingJump struct {
 	PlayerSlot int
 }
 
-func (b *ScriptBuilder) Build(result model.HighlightResult) string {
+func (b *ScriptBuilder) BuildClips(result model.HighlightResult, types model.Selection, name string) string {
 	var w strings.Builder
-	segs := b.resolveSegments(result)
+	segs := b.resolveSegments(result.Highlights, types)
 
-	b.writeSetup(&w, result.SteamID)
+	b.writeSetup(&w, result.SteamID, name)
 	b.writeTickCommands(&w, segs)
 	b.writeFooter(&w, segs)
 
 	return w.String()
 }
 
-func (b *ScriptBuilder) BuildHeadshotMontage(result model.HighlightResult, montageName string) string {
+func (b *ScriptBuilder) BuildMontage(result model.HighlightResult, types model.Selection, montageName string) string {
 	var w strings.Builder
-	segs := b.resolveHeadshotSegments(result)
+	segs := b.resolveSegments(result.Highlights, types)
 
-	b.writeSetup(&w, result.SteamID)
-	b.writeHeadshotMontageCommands(&w, segs)
-	b.writeHeadshotMontageFooter(&w, segs, montageName)
+	b.writeSetup(&w, result.SteamID, montageName)
+	b.writeMontageCommands(&w, segs)
+	b.writeMontageFooter(&w, segs, montageName)
 
 	return w.String()
 }
 
-func (b *ScriptBuilder) resolveSegments(result model.HighlightResult) []recordingSegment {
-	return b.resolveSegmentsFromHighlights(result.Highlights, shouldSkipDefaultRecording)
-}
-
-func (b *ScriptBuilder) resolveHeadshotSegments(result model.HighlightResult) []recordingSegment {
-	return b.resolveSegmentsFromHighlights(result.Highlights, shouldSkipHeadshotMontage)
-}
-
-func (b *ScriptBuilder) resolveSegmentsFromHighlights(highlights []model.Highlight, shouldSkip func(model.HighlightType) bool) []recordingSegment {
+func (b *ScriptBuilder) resolveSegments(highlights []model.Highlight, types model.Selection) []recordingSegment {
 	ranges := make([]segmentRange, 0, len(highlights))
 	for _, h := range highlights {
-		if shouldSkip != nil && shouldSkip(h.Type) {
+		if !types.Enabled(h.Type) {
 			continue
 		}
 		start := max(h.SegmentFrom-b.StartOffsetTicks, 0)
@@ -156,26 +148,17 @@ func (b *ScriptBuilder) resolveSegmentsFromHighlights(highlights []model.Highlig
 	return segments
 }
 
-func shouldSkipDefaultRecording(highlightType model.HighlightType) bool {
-	return highlightType == model.HighlightHeadshotMix || highlightType == model.HighlightHeadshot
-}
-
-func shouldSkipHeadshotMontage(highlightType model.HighlightType) bool {
-	return highlightType != model.HighlightHeadshot
-}
-
-func (b *ScriptBuilder) writeSetup(w *strings.Builder, steamID string) {
+func (b *ScriptBuilder) writeSetup(w *strings.Builder, steamID string, name string) {
 	writeCommandLine(w, "mirv_cvar_unhide_all")
 	writeCommandLine(w, "mirv_cmd clear")
 	writeCommandLine(w, "mirv_streams record end")
 	dir := strings.TrimSpace(b.OutputPath)
 	if dir != "" {
-		dir = path.Join(
-			dir,
-			sanitizeNameToken(steamID),
-			time.Now().Format("2006-01-02"),
-		)
-		writeCommandLine(w, fmt.Sprintf(`mirv_streams record name "%s"`, dir))
+		parts := []string{dir, sanitizeNameToken(steamID), time.Now().Format("2006-01-02")}
+		if token := sanitizeNameToken(name); token != "" {
+			parts = append(parts, token)
+		}
+		writeCommandLine(w, fmt.Sprintf(`mirv_streams record name "%s"`, path.Join(parts...)))
 	}
 	writeCommandLine(w, fmt.Sprintf("mirv_streams settings edit afxDefault settings %s", b.ffmpegPreset()))
 	writeCommandLine(w, "mirv_streams record screen enabled 1")
@@ -233,9 +216,9 @@ func (b *ScriptBuilder) writeTickCommands(w *strings.Builder, segs []recordingSe
 	b.writeInitialSeek(w, segs[0], "Auto-seek to first segment")
 }
 
-func (b *ScriptBuilder) writeHeadshotMontageCommands(w *strings.Builder, segs []recordingSegment) {
+func (b *ScriptBuilder) writeMontageCommands(w *strings.Builder, segs []recordingSegment) {
 	if len(segs) == 0 {
-		writeCommandLine(w, "echo \"No headshot highlights found.\"")
+		writeCommandLine(w, "echo \"No highlights found for montage.\"")
 		return
 	}
 
@@ -260,25 +243,25 @@ func (b *ScriptBuilder) writeHeadshotMontageCommands(w *strings.Builder, segs []
 	last := segs[len(segs)-1]
 	stopCmd := joinCommands("mirv_streams record end", "host_framerate 0")
 	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"%s\"", last.EndTick, stopCmd))
-	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"echo === Headshot montage recorded ===\"", last.EndTick+1))
+	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"echo === Montage recorded ===\"", last.EndTick+1))
 	writeCommandLine(w, fmt.Sprintf("mirv_cmd addAtTick %d \"disconnect\"", last.EndTick+2))
 	w.WriteString("\n")
 
-	b.writeInitialSeek(w, first, "Auto-seek to first headshot segment")
+	b.writeInitialSeek(w, first, "Auto-seek to first montage segment")
 }
 
-func (b *ScriptBuilder) writeHeadshotMontageFooter(w *strings.Builder, segs []recordingSegment, montageName string) {
+func (b *ScriptBuilder) writeMontageFooter(w *strings.Builder, segs []recordingSegment, montageName string) {
 	if len(segs) == 0 {
-		writeCommandLine(w, "echo \"Loaded 0 headshot montage segments.\"")
+		writeCommandLine(w, "echo \"Loaded 0 montage segments.\"")
 		return
 	}
-	writeCommandLine(w, fmt.Sprintf("echo \"Loaded %d headshot montage segments into one recording.\"",
+	writeCommandLine(w, fmt.Sprintf("echo \"Loaded %d montage segments into one recording.\"",
 		len(segs)))
-	writeCommandLine(w, fmt.Sprintf("echo \"Output name: %s\"", headshotMontageNameToken(montageName)))
+	writeCommandLine(w, fmt.Sprintf("echo \"Output name: %s\"", montageNameToken(montageName)))
 }
 
-func headshotMontageNameToken(rawName string) string {
-	return cmp.Or(sanitizeNameToken(rawName), "headshot_collection")
+func montageNameToken(rawName string) string {
+	return cmp.Or(sanitizeNameToken(rawName), "montage")
 }
 
 func (b *ScriptBuilder) writeFooter(w *strings.Builder, segs []recordingSegment) {

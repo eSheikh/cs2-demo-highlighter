@@ -17,7 +17,6 @@ func (s *HighlightService) BuildHighlights(demo string, steamID string, tickRate
 		s.buildSingleKillHighlights(demo, steamID, kills),
 		s.buildMultiKillHighlights(demo, steamID, kills),
 		s.buildClutchWinHighlights(demo, steamID, kills),
-		s.buildHeadshotCollectionHighlights(demo, steamID, kills),
 	)
 
 	return model.HighlightResult{

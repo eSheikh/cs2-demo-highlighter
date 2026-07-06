@@ -50,18 +50,12 @@ func Run(ctx context.Context, args []string, logger *log.Logger) error {
 }
 
 func writeHLAEScripts(cfg Config, result model.HighlightResult, logger *log.Logger) error {
-	if !cfg.HLAE.Enabled() {
-		return nil
+	for _, target := range cfg.Renders {
+		if err := writeHLAEScriptFile(target.Path, hlae.BuildTarget(result, cfg.HLAE, target), logger); err != nil {
+			return err
+		}
 	}
-
-	if err := writeHLAEScriptFile(cfg.HLAE.ScriptPath, hlae.BuildScript(result, cfg.HLAE), logger); err != nil {
-		return err
-	}
-	if !cfg.HLAE.HeadshotMontageEnabled() {
-		return nil
-	}
-
-	return writeHLAEScriptFile(cfg.HLAE.HeadshotMontageScriptPath, hlae.BuildHeadshotMontageScript(result, cfg.HLAE), logger)
+	return nil
 }
 
 func writeHLAEScriptFile(path string, content string, logger *log.Logger) error {

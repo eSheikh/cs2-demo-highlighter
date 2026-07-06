@@ -12,7 +12,6 @@ const (
 	HighlightNoScope     HighlightType = "noscope"
 	HighlightHeadshot    HighlightType = "headshot_kill"
 	HighlightClutchWin   HighlightType = "clutch_win"
-	HighlightHeadshotMix HighlightType = "headshot_collection"
 )
 
 func AllHighlightTypes() []HighlightType {
@@ -24,7 +23,6 @@ func AllHighlightTypes() []HighlightType {
 		HighlightHeadshot,
 		HighlightMultiKill,
 		HighlightClutchWin,
-		HighlightHeadshotMix,
 	}
 }
 

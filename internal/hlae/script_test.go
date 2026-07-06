@@ -9,13 +9,18 @@ import (
 )
 
 // Date segment is generated at runtime, hence a pattern rather than a fixed string.
-func assertSetupRecordName(t *testing.T, script, output, steamID string) {
+func assertSetupRecordName(t *testing.T, script, output, steamID, name string) {
 	t.Helper()
+	prefix := output + "/" + steamID + "/"
+	suffix := ""
+	if name != "" {
+		suffix = "/" + name
+	}
 	pattern := regexp.MustCompile(
-		`mirv_streams record name "` + regexp.QuoteMeta(output+"/"+steamID+"/") + `\d{4}-\d{2}-\d{2}";`,
+		`mirv_streams record name "` + regexp.QuoteMeta(prefix) + `\d{4}-\d{2}-\d{2}` + regexp.QuoteMeta(suffix) + `";`,
 	)
 	if !pattern.MatchString(script) {
-		t.Fatalf("expected record name %q/%q/<date> in setup, got script:\n%s", output, steamID, script)
+		t.Fatalf("expected record name %q/%q/<date>%q in setup, got script:\n%s", output, steamID, suffix, script)
 	}
 }
 
@@ -24,14 +29,12 @@ func TestResolveSegmentsMergesOverlap(t *testing.T) {
 	builder.StartOffsetTicks = 10
 	builder.EndOffsetTicks = 10
 
-	result := model.HighlightResult{
-		Highlights: []model.Highlight{
-			{SegmentFrom: 100, SegmentTo: 120, Type: model.HighlightWallbang, Round: 1},
-			{SegmentFrom: 125, SegmentTo: 140, Type: model.HighlightNoScope, Round: 1},
-		},
+	highlights := []model.Highlight{
+		{SegmentFrom: 100, SegmentTo: 120, Type: model.HighlightWallbang, Round: 1},
+		{SegmentFrom: 125, SegmentTo: 140, Type: model.HighlightNoScope, Round: 1},
 	}
 
-	segs := builder.resolveSegments(result)
+	segs := builder.resolveSegments(highlights, nil)
 	if len(segs) != 1 {
 		t.Fatalf("expected 1 merged segment, got %d", len(segs))
 	}
@@ -43,7 +46,24 @@ func TestResolveSegmentsMergesOverlap(t *testing.T) {
 	}
 }
 
-func TestBuildUsesPresetAndPovLock(t *testing.T) {
+func TestResolveSegmentsFiltersByType(t *testing.T) {
+	builder := NewScriptBuilder()
+
+	highlights := []model.Highlight{
+		{Type: model.HighlightNoScope, Round: 1, PlayerSlot: 9, SegmentFrom: 100, SegmentTo: 110},
+		{Type: model.HighlightWallbang, Round: 1, PlayerSlot: 9, SegmentFrom: 200, SegmentTo: 210},
+	}
+
+	segs := builder.resolveSegments(highlights, model.Selection{model.HighlightWallbang: true})
+	if len(segs) != 1 {
+		t.Fatalf("expected only the wallbang segment, got %d", len(segs))
+	}
+	if segs[0].StartTick != 200 || segs[0].EndTick != 210 {
+		t.Fatalf("unexpected segment range: %d..%d", segs[0].StartTick, segs[0].EndTick)
+	}
+}
+
+func TestBuildClipsUsesPresetAndPovLock(t *testing.T) {
 	builder := NewScriptBuilder()
 	builder.FFmpegPreset = "afxFfmpegYuv420p"
 	builder.OutputPath = "highlights"
@@ -66,7 +86,7 @@ func TestBuildUsesPresetAndPovLock(t *testing.T) {
 		},
 	}
 
-	script := builder.Build(result)
+	script := builder.BuildClips(result, nil, "highlights")
 	if strings.Contains(script, "//") {
 		t.Fatalf("script must not contain comments for CS2 console paste")
 	}
@@ -85,7 +105,7 @@ func TestBuildUsesPresetAndPovLock(t *testing.T) {
 	if strings.Contains(script, "spec_lock_to_accountid") {
 		t.Fatalf("legacy accountid lock must not be present")
 	}
-	assertSetupRecordName(t, script, "highlights", "76561197960266727")
+	assertSetupRecordName(t, script, "highlights", "76561197960266727", "highlights")
 	if !strings.Contains(script, "mirv_deathmsg filter add attackerMatch=!x76561197960266727 block=1 lastRule=1;") {
 		t.Fatalf("expected killfeed filter for selected steamid")
 	}
@@ -100,7 +120,7 @@ func TestBuildUsesPresetAndPovLock(t *testing.T) {
 	}
 }
 
-func TestBuildAddsAutoSkipBetweenSegments(t *testing.T) {
+func TestBuildClipsAddsAutoSkipBetweenSegments(t *testing.T) {
 	builder := NewScriptBuilder()
 
 	result := model.HighlightResult{
@@ -110,7 +130,7 @@ func TestBuildAddsAutoSkipBetweenSegments(t *testing.T) {
 		},
 	}
 
-	script := builder.Build(result)
+	script := builder.BuildClips(result, nil, "highlights")
 	if !strings.Contains(script, "mirv_cmd addAtTick 121 \"demo_pause; demo_gototick 299; spec_player 8; demo_resume\";") {
 		t.Fatalf("expected pause->seek->resume with next segment slot")
 	}
@@ -122,7 +142,7 @@ func TestBuildAddsAutoSkipBetweenSegments(t *testing.T) {
 	}
 }
 
-func TestBuildAddsIntraSegmentJumpForRoundMultikillGap(t *testing.T) {
+func TestBuildClipsAddsIntraSegmentJumpForRoundMultikillGap(t *testing.T) {
 	builder := NewScriptBuilder()
 	builder.StartOffsetTicks = 10
 	builder.EndOffsetTicks = 5
@@ -141,7 +161,7 @@ func TestBuildAddsIntraSegmentJumpForRoundMultikillGap(t *testing.T) {
 		},
 	}
 
-	script := builder.Build(result)
+	script := builder.BuildClips(result, nil, "highlights")
 	if !strings.Contains(script, "mirv_cmd addAtTick 136 \"demo_pause; demo_gototick 229; spec_player 7; demo_resume\";") {
 		t.Fatalf("expected one intra-segment jump for large kill gap")
 	}
@@ -153,27 +173,7 @@ func TestBuildAddsIntraSegmentJumpForRoundMultikillGap(t *testing.T) {
 	}
 }
 
-func TestResolveSegmentsSkipsHeadshotCollectionSummary(t *testing.T) {
-	builder := NewScriptBuilder()
-
-	result := model.HighlightResult{
-		Highlights: []model.Highlight{
-			{Type: model.HighlightHeadshotMix, Round: 1, PlayerSlot: 9, SegmentFrom: 100, SegmentTo: 1000},
-			{Type: model.HighlightHeadshot, Round: 1, PlayerSlot: 9, SegmentFrom: 150, SegmentTo: 151},
-			{Type: model.HighlightWallbang, Round: 1, PlayerSlot: 9, SegmentFrom: 200, SegmentTo: 210},
-		},
-	}
-
-	segs := builder.resolveSegments(result)
-	if len(segs) != 1 {
-		t.Fatalf("expected 1 segment after skipping headshot summary, got %d", len(segs))
-	}
-	if segs[0].StartTick != 200 || segs[0].EndTick != 210 {
-		t.Fatalf("unexpected regular segment range: %d..%d", segs[0].StartTick, segs[0].EndTick)
-	}
-}
-
-func TestBuildHeadshotMontageSingleOutputFile(t *testing.T) {
+func TestBuildMontageSingleOutputFile(t *testing.T) {
 	builder := NewScriptBuilder()
 	builder.OutputPath = "highlights"
 	builder.FrameRate = 120
@@ -186,8 +186,8 @@ func TestBuildHeadshotMontageSingleOutputFile(t *testing.T) {
 		},
 	}
 
-	script := builder.BuildHeadshotMontage(result, "headshot_collection")
-	assertSetupRecordName(t, script, "highlights", "76561197960266727")
+	script := builder.BuildMontage(result, model.Selection{model.HighlightHeadshot: true}, "hs")
+	assertSetupRecordName(t, script, "highlights", "76561197960266727", "hs")
 	if strings.Count(script, "mirv_streams record start") != 1 {
 		t.Fatalf("expected exactly one record start for montage")
 	}
@@ -195,18 +195,18 @@ func TestBuildHeadshotMontageSingleOutputFile(t *testing.T) {
 		t.Fatalf("expected setup end + final end commands in montage script")
 	}
 	if !strings.Contains(script, "mirv_cmd addAtTick 111 \"demo_pause; demo_gototick 299; spec_player 8; demo_resume\";") {
-		t.Fatalf("expected auto jump between headshot segments")
+		t.Fatalf("expected auto jump between montage segments")
 	}
 	if !strings.Contains(script, "mirv_cmd addAtTick 312 \"disconnect\";") {
-		t.Fatalf("expected disconnect after headshot montage")
+		t.Fatalf("expected disconnect after montage")
 	}
 }
 
 func TestHelpersUseStableFallbacks(t *testing.T) {
 	builder := NewScriptBuilder()
 
-	if got := headshotMontageNameToken("   "); got != "headshot_collection" {
-		t.Fatalf("expected default headshot montage name, got %q", got)
+	if got := montageNameToken("   "); got != "montage" {
+		t.Fatalf("expected default montage name, got %q", got)
 	}
 	if got := builder.frameRate(); got != 60 {
 		t.Fatalf("expected default framerate 60, got %d", got)

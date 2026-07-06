@@ -157,31 +157,3 @@ func TestBuildClutchWinHighlights(t *testing.T) {
 		t.Fatalf("expected 3 kills in clutch sequence, got %d", highlight.Kills)
 	}
 }
-
-func TestBuildHeadshotCollectionHighlights(t *testing.T) {
-	svc := NewHighlightService()
-	kills := []model.KillEvent{
-		{Tick: 100, Time: 10 * time.Second, Round: 1, VictimID: "v1", KillerSlot: 7, IsHeadshot: true},
-		{Tick: 200, Time: 20 * time.Second, Round: 2, VictimID: "v2", KillerSlot: 7, IsHeadshot: false},
-		{Tick: 300, Time: 30 * time.Second, Round: 3, VictimID: "v3", KillerSlot: 7, IsHeadshot: true},
-	}
-
-	highlights := svc.buildHeadshotCollectionHighlights("match.dem", "steam", kills)
-	if len(highlights) != 1 {
-		t.Fatalf("expected 1 headshot collection highlight, got %d", len(highlights))
-	}
-
-	highlight := highlights[0]
-	if highlight.Type != model.HighlightHeadshotMix {
-		t.Fatalf("expected headshot collection highlight type, got %s", highlight.Type)
-	}
-	if highlight.SegmentFrom != 100 || highlight.SegmentTo != 300 {
-		t.Fatalf("unexpected headshot segment range: %d..%d", highlight.SegmentFrom, highlight.SegmentTo)
-	}
-	if highlight.Kills != 2 {
-		t.Fatalf("expected 2 headshots in collection, got %d", highlight.Kills)
-	}
-	if highlight.Meta["scope"] != "all_match_headshots" {
-		t.Fatalf("unexpected headshot collection meta: %q", highlight.Meta["scope"])
-	}
-}

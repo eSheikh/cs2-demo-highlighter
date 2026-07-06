@@ -18,6 +18,7 @@ type Config struct {
 	SteamID    string
 	OutputPath string
 	Types      model.Selection
+	Renders    []hlae.Target
 	HLAE       hlae.Options
 }
 
@@ -31,28 +32,31 @@ func ParseConfig(args []string) (Config, error) {
 	cfg := Config{
 		OutputPath: "highlights.json",
 		HLAE: hlae.Options{
-			ScriptPath:                "highlights.cfg",
-			HeadshotMontageScriptPath: "headshots.cfg",
-			HeadshotMontageName:       "headshot_collection",
-			FrameRate:                 60,
-			OutputPath:                defaultOutputPath,
-			FFmpegPreset:              "afxFfmpegYuv420p",
-			PreRollSeconds:            3,
-			PostRollSeconds:           2,
-			KillGapSeconds:            10,
+			FrameRate:       60,
+			OutputPath:      defaultOutputPath,
+			FFmpegPreset:    "afxFfmpegYuv420p",
+			PreRollSeconds:  3,
+			PostRollSeconds: 2,
+			KillGapSeconds:  10,
 		},
 	}
 
-	var typesRaw string
+	var (
+		typesRaw string
+		renders  []hlae.Target
+	)
 
 	flags := flag.NewFlagSet("highlighter", flag.ContinueOnError)
 	flags.StringVar(&cfg.DemoPath, "demo", "", "path to .dem file")
 	flags.StringVar(&cfg.SteamID, "steamid", "", "steamid64 to filter kills")
-	flags.StringVar(&typesRaw, "types", "", "comma-separated highlight types to keep (empty = all): "+strings.Join(highlightTypeNames(), ","))
+	flags.StringVar(&typesRaw, "types", "", "comma-separated highlight types kept in the result (empty = all): "+strings.Join(highlightTypeNames(), ","))
 	flags.StringVar(&cfg.OutputPath, "out", cfg.OutputPath, "output json path")
-	flags.StringVar(&cfg.HLAE.ScriptPath, "hlae", cfg.HLAE.ScriptPath, "output HLAE automation script path")
-	flags.StringVar(&cfg.HLAE.HeadshotMontageScriptPath, "hlae-headshots", cfg.HLAE.HeadshotMontageScriptPath, "output HLAE script path for one-file headshot montage")
-	flags.StringVar(&cfg.HLAE.HeadshotMontageName, "hlae-headshots-name", cfg.HLAE.HeadshotMontageName, "recording output name for headshot montage")
+	flags.Func("clips", "clips render target as [types=]path.cfg (repeatable); types empty/all = every type", func(v string) error {
+		return appendRender(&renders, hlae.ModeClips, v)
+	})
+	flags.Func("montage", "montage render target as [types=]path.cfg (repeatable); one continuous recording", func(v string) error {
+		return appendRender(&renders, hlae.ModeMontage, v)
+	})
 	flags.IntVar(&cfg.HLAE.FrameRate, "hlae-fps", cfg.HLAE.FrameRate, "recording framerate")
 	flags.StringVar(&cfg.HLAE.OutputPath, "hlae-path", cfg.HLAE.OutputPath, "output directory for mirv_streams recordings")
 	flags.StringVar(&cfg.HLAE.FFmpegPreset, "hlae-preset", cfg.HLAE.FFmpegPreset, "HLAE ffmpeg preset for mirv_streams")
@@ -70,6 +74,7 @@ func ParseConfig(args []string) (Config, error) {
 		return Config{}, err
 	}
 	cfg.Types = selection
+	cfg.Renders = defaultedRenders(renders)
 
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -88,10 +93,10 @@ func highlightTypeNames() []string {
 }
 
 // parseTypes turns a comma-separated list of highlight types into a Selection.
-// Empty input yields a nil selection (all types enabled). Unknown names fail.
+// Empty input (or "all") yields a nil selection (all types enabled).
 func parseTypes(raw string) (model.Selection, error) {
 	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
+	if trimmed == "" || strings.EqualFold(trimmed, "all") {
 		return nil, nil
 	}
 
@@ -119,14 +124,55 @@ func parseTypes(raw string) (model.Selection, error) {
 	return selection, nil
 }
 
+// appendRender parses a render-target flag value ("[types=]path.cfg") and adds
+// it to renders. Split on the first '=' so Windows drive-letter paths survive.
+func appendRender(renders *[]hlae.Target, mode hlae.Mode, raw string) error {
+	value := strings.TrimSpace(raw)
+	typesRaw := ""
+	pathRaw := value
+	if idx := strings.Index(value, "="); idx >= 0 {
+		typesRaw = value[:idx]
+		pathRaw = value[idx+1:]
+	}
+
+	path := strings.TrimSpace(pathRaw)
+	if path == "" {
+		return fmt.Errorf("render target %q has no output path", raw)
+	}
+
+	types, err := parseTypes(typesRaw)
+	if err != nil {
+		return err
+	}
+
+	*renders = append(*renders, hlae.Target{
+		Mode:  mode,
+		Types: types,
+		Path:  path,
+		Name:  nameFromPath(path),
+	})
+	return nil
+}
+
+func nameFromPath(path string) string {
+	base := filepath.Base(path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+// defaultedRenders falls back to a single clips target covering every type when
+// no render flags were supplied.
+func defaultedRenders(renders []hlae.Target) []hlae.Target {
+	if len(renders) > 0 {
+		return renders
+	}
+	return []hlae.Target{{Mode: hlae.ModeClips, Path: "highlights.cfg", Name: "highlights"}}
+}
+
 func (c *Config) normalize() {
 	c.DemoPath = strings.TrimSpace(c.DemoPath)
 	c.SteamID = strings.TrimSpace(c.SteamID)
 	c.OutputPath = strings.TrimSpace(c.OutputPath)
 
-	c.HLAE.ScriptPath = strings.TrimSpace(c.HLAE.ScriptPath)
-	c.HLAE.HeadshotMontageScriptPath = strings.TrimSpace(c.HLAE.HeadshotMontageScriptPath)
-	c.HLAE.HeadshotMontageName = strings.TrimSpace(c.HLAE.HeadshotMontageName)
 	c.HLAE.OutputPath = strings.TrimSpace(c.HLAE.OutputPath)
 	c.HLAE.FFmpegPreset = strings.TrimSpace(c.HLAE.FFmpegPreset)
 }

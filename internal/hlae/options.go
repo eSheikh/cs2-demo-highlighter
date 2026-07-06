@@ -1,42 +1,47 @@
 package hlae
 
 import (
-	"strings"
-
 	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 )
 
+// Options holds the shared rendering settings applied to every render target.
 type Options struct {
-	ScriptPath                string
-	HeadshotMontageScriptPath string
-	HeadshotMontageName       string
-	FrameRate                 int
-	OutputPath                string
-	FFmpegPreset              string
-	PreRollSeconds            int
-	PostRollSeconds           int
-	KillGapSeconds            int
+	FrameRate       int
+	OutputPath      string
+	FFmpegPreset    string
+	PreRollSeconds  int
+	PostRollSeconds int
+	KillGapSeconds  int
 }
 
-func (o Options) Enabled() bool {
-	return strings.TrimSpace(o.ScriptPath) != ""
+// Mode selects how a target packages its highlights.
+type Mode int
+
+const (
+	// ModeClips records each highlight as its own segment (separate takes).
+	ModeClips Mode = iota
+	// ModeMontage records the selected highlights into one continuous take with jump cuts.
+	ModeMontage
+)
+
+// Target is a single .cfg to generate: a render mode over a set of highlight
+// types. An empty Types selects all types.
+type Target struct {
+	Mode  Mode
+	Types model.Selection
+	Path  string
+	Name  string
 }
 
-func (o Options) HeadshotMontageEnabled() bool {
-	return strings.TrimSpace(o.HeadshotMontageScriptPath) != ""
-}
-
-func BuildScript(result model.HighlightResult, options Options) string {
+func BuildTarget(result model.HighlightResult, options Options, target Target) string {
 	builder := configuredBuilder(result, options)
+	if target.Mode == ModeMontage {
+		return builder.BuildMontage(result, target.Types, target.Name)
+	}
 	if options.KillGapSeconds > 0 && result.TickRate > 0 {
 		builder.KillGapTicks = int(result.TickRate * float64(options.KillGapSeconds))
 	}
-	return builder.Build(result)
-}
-
-func BuildHeadshotMontageScript(result model.HighlightResult, options Options) string {
-	builder := configuredBuilder(result, options)
-	return builder.BuildHeadshotMontage(result, options.HeadshotMontageName)
+	return builder.BuildClips(result, target.Types, target.Name)
 }
 
 func configuredBuilder(result model.HighlightResult, options Options) *ScriptBuilder {
