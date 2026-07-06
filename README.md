@@ -67,6 +67,16 @@ Run tests:
 go test ./...
 ```
 
+## Interactive mode (TUI)
+
+An interactive terminal UI walks through demo path → player selection → parsing (with a live progress bar) → highlight-type selection → cfg generation:
+
+```bash
+go run ./cmd/tui /path/to/match.dem
+```
+
+The demo path argument is optional and only pre-fills the first field. In the results screen, `space` toggles highlight types and `c` / `m` write a clips / montage `.cfg` for the selected types.
+
 ## Render targets
 
 Recording output is configured with repeatable `--clips` and `--montage` flags. Each flag produces one `.cfg` file and has the form:
@@ -149,24 +159,26 @@ Rounds are 1-based (round 1 is the first round).
 
 ```json
 {
-  "demo": "mirage1.dem",
+  "demo": "mirage.dem",
   "steamid": "7656119XXXXXXXXXX",
   "tick_rate": 64,
   "highlights": [
     {
       "type": "round_multikill",
-      "round": 5,
-      "tick_start": 34217,
-      "tick_end": 34714,
-      "kills": 2,
-      "kill_ticks": [34217, 34714],
-      "victims": ["7656119XXXXXXXXXX", "7656119XXXXXXXXXX"],
-      "weapon": "AWP",
-      "player_slot": 9,
+      "round": 16,
+      "tick_start": 112258,
+      "tick_end": 112610,
+      "time_start_sec": 1754.03,
+      "time_end_sec": 1759.53,
+      "kills": 3,
+      "kill_ticks": [112258, 112430, 112610],
+      "victims": ["7656119XXXXXXXXXX", "7656119XXXXXXXXXX", "7656119XXXXXXXXXX"],
+      "weapon": "M4A1",
+      "player_slot": 10,
       "steamid": "7656119XXXXXXXXXX",
-      "demo": "mirage1.dem",
-      "segment_tick_start": 34217,
-      "segment_tick_end": 34714
+      "demo": "mirage.dem",
+      "segment_tick_start": 112258,
+      "segment_tick_end": 112610
     }
   ]
 }
@@ -185,10 +197,11 @@ mirv_streams settings edit afxDefault settings afxFfmpegYuv420p;
 mirv_streams record fps 60;
 ...
 
-mirv_cmd addAtTick 34025 "spec_player 9; host_framerate 60; mirv_streams record start";
-mirv_cmd addAtTick 34817 "mirv_streams record end; host_framerate 0";
-mirv_cmd addAtTick 34818 "demo_pause; demo_gototick 40130; spec_player 9; demo_resume";
+mirv_cmd addAtTick 112066 "spec_player 10; host_framerate 60; mirv_streams record start";
+mirv_cmd addAtTick 112738 "mirv_streams record end; host_framerate 0";
 ```
+
+The `112066`/`112738` ticks are the JSON example's `112258`/`112610` extended by the 3s pre-roll and 2s post-roll (at 64 tick), and `spec_player 10` matches its `player_slot`.
 
 ## Validation and Error Handling
 
@@ -225,9 +238,8 @@ mirv_cmd addAtTick 34818 "demo_pause; demo_gototick 40130; spec_player 9; demo_r
 ## Roadmap
 
 1. New highlight types (`awp_flick`, `360`, etc.).
-2. Interactive TUI (demo/player selection, live progress, highlight picker).
-3. Automated HLAE launch/recording (`recorder`).
-4. Add audio to recorded highlight videos.
+2. Automated HLAE launch/recording (`recorder`).
+3. Add audio to recorded highlight videos.
 
 ## License
 
