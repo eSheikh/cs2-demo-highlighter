@@ -6,11 +6,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
+	"github.com/charmbracelet/bubbles/filepicker"
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/eSheikh/cs2-demo-highlighter/internal/engine"
 	"github.com/eSheikh/cs2-demo-highlighter/internal/hlae"
@@ -20,39 +23,83 @@ import (
 type state int
 
 const (
-	stateDemo state = iota
+	statePicker state = iota
+	stateRosterLoading
 	stateRoster
 	stateParsing
 	stateResults
 )
 
-var (
-	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	cursorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	okStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	errStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
+const (
+	focusTypes = iota
+	focusOutput
 )
 
-// Run starts the interactive program, defaulting the demo path field to demoArg.
+// Run starts the interactive program. demoArg, if a path, sets the file
+// picker's starting directory.
 func Run(eng *engine.Engine, demoArg string) error {
-	input := textinput.New()
-	input.Placeholder = "/path/to/match.dem"
-	input.SetValue(demoArg)
-	input.Focus()
-	input.CursorEnd()
+	m := newModel(eng, demoArg)
+	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+	return err
+}
+
+func newModel(eng *engine.Engine, demoArg string) appModel {
+	fp := filepicker.New()
+	fp.AllowedTypes = []string{".dem"}
+	fp.CurrentDirectory = startDir(demoArg)
+	fp.AutoHeight = false
+
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+
+	out := textinput.New()
+	out.SetValue("clips")
+	out.CharLimit = 64
+
+	players := list.New(nil, list.NewDefaultDelegate(), 0, 0)
+	players.Title = "Players"
+	players.SetShowHelp(false)
 
 	m := appModel{
 		eng:      eng,
-		state:    stateDemo,
-		input:    input,
-		progress: progress.New(progress.WithDefaultGradient()),
+		state:    statePicker,
 		options:  defaultOptions(),
+		picker:   fp,
+		spin:     sp,
+		players:  players,
+		progress: progress.New(progress.WithDefaultGradient()),
+		output:   out,
+		mode:     hlae.ModeClips,
 	}
+	// A demo file argument skips the picker and loads its roster directly.
+	if isDemoFile(demoArg) {
+		m.demoPath = demoArg
+		m.state = stateRosterLoading
+	}
+	return m
+}
 
-	_, err := tea.NewProgram(m).Run()
-	return err
+func isDemoFile(path string) bool {
+	if filepath.Ext(path) != ".dem" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
+func startDir(demoArg string) string {
+	if demoArg != "" {
+		if info, err := os.Stat(demoArg); err == nil && info.IsDir() {
+			return demoArg
+		}
+		if dir := filepath.Dir(demoArg); dir != "" {
+			return dir
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	return "."
 }
 
 func defaultOptions() hlae.Options {
@@ -76,29 +123,45 @@ type typeCount struct {
 	Enabled bool
 }
 
+type playerItem struct{ player model.Player }
+
+func (i playerItem) Title() string       { return i.player.Name }
+func (i playerItem) Description() string  { return i.player.SteamID }
+func (i playerItem) FilterValue() string { return i.player.Name }
+
 type appModel struct {
 	eng     *engine.Engine
 	state   state
 	options hlae.Options
+	width   int
+	height  int
 
-	input   textinput.Model
-	err     error
-	loading bool
-
-	roster       []model.Player
-	rosterCursor int
-
+	picker   filepicker.Model
+	spin     spinner.Model
+	players  list.Model
 	progress progress.Model
+	output   textinput.Model
+
+	demoPath string
+	err      error
+
 	fraction float64
 	events   chan extractEvent
 
 	result       model.HighlightResult
 	types        []typeCount
 	typeCursor   int
+	mode         hlae.Mode
+	resultsFocus int
 	generatedMsg string
 }
 
-func (m appModel) Init() tea.Cmd { return textinput.Blink }
+func (m appModel) Init() tea.Cmd {
+	if m.state == stateRosterLoading {
+		return tea.Batch(m.spin.Tick, rosterCmd(m.eng, m.demoPath))
+	}
+	return tea.Batch(m.picker.Init(), m.spin.Tick)
+}
 
 // --- messages / commands ---
 
@@ -150,38 +213,42 @@ func waitExtract(events chan extractEvent) tea.Cmd {
 // --- update ---
 
 func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "ctrl+c" {
+		return m, tea.Quit
+	}
+
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.Type == tea.KeyCtrlC {
-			return m, tea.Quit
-		}
-		switch m.state {
-		case stateDemo:
-			return m.updateDemo(msg)
-		case stateRoster:
-			return m.updateRoster(msg)
-		case stateResults:
-			return m.updateResults(msg)
-		}
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		m.applySizes()
+		return m, nil
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spin, cmd = m.spin.Update(msg)
+		return m, cmd
 	case rosterMsg:
-		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
+			m.state = statePicker
 			return m, nil
 		}
 		if len(msg.players) == 0 {
 			m.err = fmt.Errorf("no players found in demo")
+			m.state = statePicker
 			return m, nil
 		}
 		m.err = nil
-		m.roster = msg.players
-		m.rosterCursor = 0
+		items := make([]list.Item, len(msg.players))
+		for i, p := range msg.players {
+			items[i] = playerItem{player: p}
+		}
+		m.players.SetItems(items)
 		m.state = stateRoster
 		return m, nil
 	case extractEvent:
 		if msg.err != nil {
 			m.err = msg.err
-			m.state = stateDemo
+			m.state = statePicker
 			return m, nil
 		}
 		if msg.done {
@@ -195,51 +262,79 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fraction = msg.fraction
 		return m, waitExtract(m.events)
 	}
+
+	switch m.state {
+	case statePicker:
+		return m.updatePicker(msg)
+	case stateRoster:
+		return m.updateRoster(msg)
+	case stateResults:
+		if key, ok := msg.(tea.KeyMsg); ok {
+			return m.updateResults(key)
+		}
+	}
 	return m, nil
 }
 
-func (m appModel) updateDemo(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyEnter {
-		demo := m.input.Value()
-		if demo == "" {
-			return m, nil
-		}
-		m.loading = true
-		m.err = nil
-		return m, rosterCmd(m.eng, demo)
-	}
+func (m *appModel) applySizes() {
+	m.picker.SetHeight(max(m.height-8, 3))
+	m.players.SetSize(max(m.width-6, 10), max(m.height-8, 3))
+	m.progress.Width = min(max(m.width-12, 20), 60)
+	m.output.Width = 24
+}
+
+func (m appModel) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
+	m.picker, cmd = m.picker.Update(msg)
+	if ok, path := m.picker.DidSelectFile(msg); ok {
+		m.demoPath = path
+		m.err = nil
+		m.state = stateRosterLoading
+		return m, tea.Batch(cmd, m.spin.Tick, rosterCmd(m.eng, path))
+	}
 	return m, cmd
 }
 
-func (m appModel) updateRoster(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "q", "esc":
-		return m, tea.Quit
-	case "up", "k":
-		if m.rosterCursor > 0 {
-			m.rosterCursor--
+func (m appModel) updateRoster(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok && m.players.FilterState() != list.Filtering {
+		switch key.String() {
+		case "q":
+			return m, tea.Quit
+		case "enter":
+			if item, ok := m.players.SelectedItem().(playerItem); ok {
+				m.events = make(chan extractEvent, 32)
+				m.fraction = 0
+				m.err = nil
+				m.state = stateParsing
+				return m, tea.Batch(
+					m.spin.Tick,
+					startExtract(m.eng, m.demoPath, item.player.SteamID, m.events),
+					waitExtract(m.events),
+				)
+			}
 		}
-	case "down", "j":
-		if m.rosterCursor < len(m.roster)-1 {
-			m.rosterCursor++
-		}
-	case "enter":
-		m.events = make(chan extractEvent, 32)
-		m.fraction = 0
-		m.err = nil
-		m.state = stateParsing
-		player := m.roster[m.rosterCursor]
-		return m, tea.Batch(
-			startExtract(m.eng, m.input.Value(), player.SteamID, m.events),
-			waitExtract(m.events),
-		)
 	}
-	return m, nil
+	var cmd tea.Cmd
+	m.players, cmd = m.players.Update(msg)
+	return m, cmd
 }
 
 func (m appModel) updateResults(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.resultsFocus == focusOutput {
+		switch msg.String() {
+		case "tab", "esc":
+			m.resultsFocus = focusTypes
+			m.output.Blur()
+		case "enter":
+			m.generatedMsg = m.generate(m.mode, m.output.Value())
+		default:
+			var cmd tea.Cmd
+			m.output, cmd = m.output.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "q", "esc":
 		return m, tea.Quit
@@ -255,10 +350,17 @@ func (m appModel) updateResults(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.types) > 0 {
 			m.types[m.typeCursor].Enabled = !m.types[m.typeCursor].Enabled
 		}
-	case "c":
-		m.generatedMsg = m.generate(hlae.ModeClips, "clips")
 	case "m":
-		m.generatedMsg = m.generate(hlae.ModeMontage, "montage")
+		if m.mode == hlae.ModeClips {
+			m.mode = hlae.ModeMontage
+		} else {
+			m.mode = hlae.ModeClips
+		}
+	case "tab":
+		m.resultsFocus = focusOutput
+		return m, m.output.Focus()
+	case "enter", "g":
+		m.generatedMsg = m.generate(m.mode, m.output.Value())
 	}
 	return m, nil
 }
@@ -278,6 +380,9 @@ func (m appModel) generate(mode hlae.Mode, name string) string {
 	if len(selection) == 0 {
 		return errStyle.Render("select at least one highlight type")
 	}
+	if name == "" {
+		name = modeName(mode)
+	}
 	path := name + ".cfg"
 	content := hlae.BuildTarget(m.result, m.options, hlae.Target{
 		Mode:  mode,
@@ -288,7 +393,14 @@ func (m appModel) generate(mode hlae.Mode, name string) string {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return errStyle.Render("write failed: " + err.Error())
 	}
-	return okStyle.Render(fmt.Sprintf("saved %s (%s)", path, name))
+	return okStyle.Render(fmt.Sprintf("saved %s", path))
+}
+
+func modeName(mode hlae.Mode) string {
+	if mode == hlae.ModeMontage {
+		return "montage"
+	}
+	return "clips"
 }
 
 func countTypes(result model.HighlightResult) []typeCount {
@@ -309,56 +421,45 @@ func countTypes(result model.HighlightResult) []typeCount {
 
 func (m appModel) View() string {
 	switch m.state {
-	case stateDemo:
-		return m.viewDemo()
+	case statePicker:
+		return chrome(m.width, m.height, "1/4  Demo", m.bodyPicker(),
+			"↑/↓ navigate   enter select   ctrl+c quit")
+	case stateRosterLoading:
+		return chrome(m.width, m.height, "2/4  Player", m.spin.View()+" reading roster…",
+			"ctrl+c quit")
 	case stateRoster:
-		return m.viewRoster()
+		return chrome(m.width, m.height, "2/4  Player", m.players.View(),
+			"↑/↓ move   / filter   enter parse   ctrl+c quit")
 	case stateParsing:
-		return m.viewParsing()
+		return chrome(m.width, m.height, "3/4  Parsing", m.bodyParsing(),
+			"parsing…   ctrl+c quit")
 	case stateResults:
-		return m.viewResults()
+		return chrome(m.width, m.height, "4/4  Output", m.bodyResults(), m.resultsFooter())
 	}
 	return ""
 }
 
-func (m appModel) viewDemo() string {
-	s := titleStyle.Render("CS2 Demo Highlighter") + "\n\n"
-	s += "Demo path:\n" + m.input.View() + "\n\n"
-	if m.loading {
-		s += dimStyle.Render("reading roster…") + "\n"
-	}
+func (m appModel) bodyPicker() string {
+	s := titleStyle.Render("Select a demo (.dem)") + "\n"
+	s += dimStyle.Render(m.picker.CurrentDirectory) + "\n\n"
+	s += m.picker.View()
 	if m.err != nil {
-		s += errStyle.Render("error: "+m.err.Error()) + "\n"
+		s += "\n\n" + errStyle.Render("error: "+m.err.Error())
 	}
-	s += dimStyle.Render("enter: continue   ctrl+c: quit")
-	return s + "\n"
+	return s
 }
 
-func (m appModel) viewRoster() string {
-	s := titleStyle.Render("Select player") + "\n\n"
-	for i, p := range m.roster {
-		cursor := "  "
-		line := fmt.Sprintf("%s  %s", p.Name, dimStyle.Render(p.SteamID))
-		if i == m.rosterCursor {
-			cursor = cursorStyle.Render("> ")
-			line = selectedStyle.Render(p.Name) + "  " + dimStyle.Render(p.SteamID)
-		}
-		s += cursor + line + "\n"
-	}
-	s += "\n" + dimStyle.Render("↑/↓: move   enter: parse   q: quit")
-	return s + "\n"
-}
-
-func (m appModel) viewParsing() string {
-	s := titleStyle.Render("Parsing demo") + "\n\n"
+func (m appModel) bodyParsing() string {
+	s := titleStyle.Render("Parsing demo") + "\n"
+	s += dimStyle.Render(filepath.Base(m.demoPath)) + "\n\n"
 	s += m.progress.ViewAs(m.fraction) + "\n\n"
-	s += dimStyle.Render(fmt.Sprintf("%.0f%%", m.fraction*100))
-	return s + "\n"
+	s += m.spin.View() + dimStyle.Render(fmt.Sprintf(" %.0f%%", m.fraction*100))
+	return s
 }
 
-func (m appModel) viewResults() string {
-	s := titleStyle.Render("Highlights") + "\n"
-	s += dimStyle.Render(fmt.Sprintf("%s — %d highlights", m.result.Demo, len(m.result.Highlights))) + "\n\n"
+func (m appModel) bodyResults() string {
+	s := titleStyle.Render("Highlights") + "  "
+	s += dimStyle.Render(fmt.Sprintf("%s — %d total", m.result.Demo, len(m.result.Highlights))) + "\n\n"
 
 	if len(m.types) == 0 {
 		s += dimStyle.Render("no highlights found") + "\n"
@@ -369,17 +470,31 @@ func (m appModel) viewResults() string {
 			check = "[x]"
 		}
 		cursor := "  "
-		label := fmt.Sprintf("%s %-16s %s", check, t.Type, dimStyle.Render(fmt.Sprintf("×%d", t.Count)))
-		if i == m.typeCursor {
+		line := fmt.Sprintf("%s %-16s %s", check, t.Type, dimStyle.Render(fmt.Sprintf("×%d", t.Count)))
+		if i == m.typeCursor && m.resultsFocus == focusTypes {
 			cursor = cursorStyle.Render("> ")
-			label = selectedStyle.Render(label)
+			line = selectedStyle.Render(line)
 		}
-		s += cursor + label + "\n"
+		s += cursor + line + "\n"
 	}
 
-	if m.generatedMsg != "" {
-		s += "\n" + m.generatedMsg + "\n"
+	clips, montage := inactiveTab.Render("clips"), inactiveTab.Render("montage")
+	if m.mode == hlae.ModeMontage {
+		montage = activeTab.Render("montage")
+	} else {
+		clips = activeTab.Render("clips")
 	}
-	s += "\n" + dimStyle.Render("↑/↓: move   space: toggle   c: clips   m: montage   q: quit")
-	return s + "\n"
+	s += "\n" + "Mode  " + clips + " " + montage + dimStyle.Render("   (m to toggle)") + "\n"
+	s += "Output  " + m.output.View() + dimStyle.Render(".cfg")
+	if m.generatedMsg != "" {
+		s += "\n\n" + m.generatedMsg
+	}
+	return s
+}
+
+func (m appModel) resultsFooter() string {
+	if m.resultsFocus == focusOutput {
+		return "type name   enter generate   tab/esc back   ctrl+c quit"
+	}
+	return "↑/↓ move   space toggle   m mode   tab name   enter generate   q quit"
 }

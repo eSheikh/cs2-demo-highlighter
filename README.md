@@ -75,7 +75,7 @@ An interactive terminal UI walks through demo path → player selection → pars
 go run ./cmd/tui /path/to/match.dem
 ```
 
-The demo path argument is optional and only pre-fills the first field. In the results screen, `space` toggles highlight types and `c` / `m` write a clips / montage `.cfg` for the selected types.
+The demo path argument is optional; a `.dem` file skips the picker and loads its roster directly. In the results screen `space` toggles highlight types, `m` switches the clips/montage mode, `tab` edits the output name, and `enter` writes the `.cfg`.
 
 ## Render targets
 
