@@ -20,10 +20,11 @@ The project is focused on extraction and recording orchestration, not on a full 
   - `kill_blinded`
   - `wallbang`
   - `noscope`
+  - `headshot_kill`
   - `round_multikill`
   - `clutch_win`
-  - `headshot_kill`
-  - `headshot_collection` (summary event)
+- Highlight type filtering (`--types`)
+- Flexible render targets: any set of highlight types as either **clips** (one recording per segment) or a **montage** (one continuous recording with jump cuts)
 - HLAE script generation based on `mirv_streams` (without `startmovie`)
 - POV lock using `spec_player <slot>`
 - Pre-roll and post-roll segment extension
@@ -32,11 +33,8 @@ The project is focused on extraction and recording orchestration, not on a full 
 
 ## Outputs
 
-The tool can generate:
-
 - `highlights.json`: normalized highlight metadata
-- `highlights.cfg`: HLAE script for regular highlight clips
-- `headshots.cfg`: HLAE script for one-file headshot montage with jump cuts
+- One `.cfg` per render target (see [Render targets](#render-targets)). By default a single clips script covering every highlight type.
 
 ## Requirements
 
@@ -60,10 +58,7 @@ go run ./cmd/highlighter \
   --demo /path/to/match.dem \
   --steamid 7656119XXXXXXXXXX \
   --out highlights.json \
-  --hlae highlights.cfg \
-  --hlae-headshots headshots.cfg \
-  --hlae-path highlights \
-  --hlae-preset afxFfmpegYuv420p
+  --clips highlights.cfg
 ```
 
 Run tests:
@@ -72,28 +67,52 @@ Run tests:
 go test ./...
 ```
 
-## CLI Reference
+## Render targets
 
-| Flag                    | Default               | Description                                                                               |
-| ----------------------- | --------------------- | ----------------------------------------------------------------------------------------- |
-| `--demo`                | -                     | Path to input `.dem` file (required)                                                      |
-| `--steamid`             | -                     | Target SteamID64 (required, 17 digits)                                                    |
-| `--out`                 | `highlights.json`     | Output JSON path (empty disables JSON output)                                             |
-| `--hlae`                | `highlights.cfg`      | Output path for regular HLAE script                                                       |
-| `--hlae-headshots`      | `headshots.cfg`       | Output path for headshot montage HLAE script                                              |
-| `--hlae-headshots-name` | `headshot_collection` | Recording name for montage output                                                         |
-| `--hlae-path`           | `highlights`          | Prefix used in `mirv_streams record name`                                                 |
-| `--hlae-preset`         | `afxFfmpegYuv420p`    | HLAE FFmpeg preset                                                                        |
-| `--hlae-fps`            | `60`                  | Recording frame rate                                                                      |
-| `--hlae-preroll`        | `3`                   | Seconds added before each event                                                           |
-| `--hlae-postroll`       | `2`                   | Seconds added after each event                                                            |
-| `--hlae-kill-gap`       | `10`                  | Seconds between kills in `round_multikill` to trigger an in-recording jump (`0` disables) |
+Recording output is configured with repeatable `--clips` and `--montage` flags. Each flag produces one `.cfg` file and has the form:
 
-Disable headshot montage script generation:
+```
+[types=]path.cfg
+```
+
+- `types` — comma-separated highlight types (omit, or use `all`, for every type). The value is split on the **first** `=`, so Windows drive-letter paths (`C:\...`) are preserved.
+- `path.cfg` — output script path. Its base name is also used as a trailing segment of the `mirv_streams record name`, so multiple targets record into distinct folders.
+
+If neither flag is given, the tool defaults to a single clips target of all types written to `highlights.cfg`.
+
+Examples:
 
 ```bash
-go run ./cmd/highlighter ... --hlae-headshots ""
+# Clips of every highlight (default behavior, explicit)
+go run ./cmd/highlighter ... --clips highlights.cfg
+
+# Separate outputs in one run: clutch clips + a headshot montage
+go run ./cmd/highlighter ... \
+  --clips clutch_win,wallbang=clutches.cfg \
+  --montage headshot_kill=headshots.cfg
+
+# A montage of every smoke kill, and another of every noscope
+go run ./cmd/highlighter ... \
+  --montage kill_in_smoke=smokes.cfg \
+  --montage noscope=noscopes.cfg
 ```
+
+## CLI Reference
+
+| Flag              | Default            | Description                                                                               |
+| ----------------- | ------------------ | ----------------------------------------------------------------------------------------- |
+| `--demo`          | -                  | Path to input `.dem` file (required)                                                      |
+| `--steamid`       | -                  | Target SteamID64 (required, 17 digits)                                                    |
+| `--out`           | `highlights.json`  | Output JSON path (empty disables JSON output)                                             |
+| `--types`         | (all)              | Comma-separated highlight types kept in the result (empty/`all` = every type)             |
+| `--clips`         | `highlights.cfg`   | Clips render target `[types=]path.cfg` (repeatable)                                        |
+| `--montage`       | -                  | Montage render target `[types=]path.cfg` (repeatable)                                      |
+| `--hlae-path`     | current directory  | Output directory used in `mirv_streams record name`                                       |
+| `--hlae-preset`   | `afxFfmpegYuv420p` | HLAE FFmpeg preset                                                                        |
+| `--hlae-fps`      | `60`               | Recording frame rate                                                                      |
+| `--hlae-preroll`  | `3`                | Seconds added before each event                                                           |
+| `--hlae-postroll` | `2`                | Seconds added after each event                                                            |
+| `--hlae-kill-gap` | `10`               | Seconds between kills in `round_multikill` to trigger an in-recording jump (`0` disables) |
 
 Disable JSON output:
 
@@ -103,22 +122,22 @@ go run ./cmd/highlighter ... --out ""
 
 ## Recording Workflows
 
-### Regular highlights (`highlights.cfg`)
+### Clips (one recording per segment)
 
 1. Launch CS2 through HLAE.
 2. Load demo: `playdemo <demo_name>`.
-3. Paste `highlights.cfg` into the HLAE console.
+3. Paste the clips `.cfg` into the HLAE console.
 4. Wait for `All N segments recorded`.
-5. Script ends with `disconnect` and returns to main menu.
+5. Script ends with `disconnect` and returns to the main menu.
 
 Result: multiple output files, one per segment.
 
-### Headshot montage (`headshots.cfg`)
+### Montage (one continuous recording)
 
 1. Load the same demo.
-2. Paste `headshots.cfg`.
-3. Recording starts once, jumps across headshot segments, then stops once.
-4. Script ends with `disconnect` and returns to main menu.
+2. Paste the montage `.cfg`.
+3. Recording starts once, jumps across the selected segments, then stops once.
+4. Script ends with `disconnect` and returns to the main menu.
 
 Result: one montage-oriented output file.
 
@@ -126,46 +145,49 @@ Result: one montage-oriented output file.
 
 ### `highlights.json`
 
+Rounds are 1-based (round 1 is the first round).
+
 ```json
 {
-  "demo": "mirage.dem",
+  "demo": "mirage1.dem",
   "steamid": "7656119XXXXXXXXXX",
   "tick_rate": 64,
   "highlights": [
     {
       "type": "round_multikill",
-      "round": 16,
-      "tick_start": 112258,
-      "tick_end": 112610,
-      "kills": 3,
-      "weapon": "M4A1",
-      "player_slot": 10
+      "round": 5,
+      "tick_start": 34217,
+      "tick_end": 34714,
+      "kills": 2,
+      "kill_ticks": [34217, 34714],
+      "victims": ["7656119XXXXXXXXXX", "7656119XXXXXXXXXX"],
+      "weapon": "AWP",
+      "player_slot": 9,
+      "steamid": "7656119XXXXXXXXXX",
+      "demo": "mirage1.dem",
+      "segment_tick_start": 34217,
+      "segment_tick_end": 34714
     }
   ]
 }
 ```
 
-### `highlights.cfg`
+### Clips `.cfg` (abridged)
+
+The setup block is emitted once, followed by per-segment `mirv_cmd addAtTick` lines. Output is comment-free because the CS2/HLAE console can break on comment lines.
 
 ```cfg
+mirv_cvar_unhide_all;
+mirv_cmd clear;
+mirv_streams record end;
+mirv_streams record name "<hlae-path>/<steamid>/<date>/<target>";
 mirv_streams settings edit afxDefault settings afxFfmpegYuv420p;
 mirv_streams record fps 60;
-spec_show_xray 0;
+...
 
-mirv_cmd addAtTick 112066 "spec_player 10; host_framerate 60; mirv_streams record name highlights_hl_0005_r16_round_multikill; mirv_streams record start";
-mirv_cmd addAtTick 112738 "mirv_streams record end; host_framerate 0";
-mirv_cmd addAtTick 112739 "demo_pause; demo_gototick 118230; spec_player 10; demo_resume";
-```
-
-### `headshots.cfg`
-
-```cfg
-mirv_streams settings edit afxDefault settings afxFfmpegYuv420p;
-mirv_streams record fps 60;
-
-mirv_cmd addAtTick 26746 "spec_player 10; host_framerate 60; mirv_streams record name highlights_headshot_collection; mirv_streams record start";
-mirv_cmd addAtTick 27067 "demo_pause; demo_gototick 59674; spec_player 10; demo_resume";
-mirv_cmd addAtTick 118664 "mirv_streams record end; host_framerate 0";
+mirv_cmd addAtTick 34025 "spec_player 9; host_framerate 60; mirv_streams record start";
+mirv_cmd addAtTick 34817 "mirv_streams record end; host_framerate 0";
+mirv_cmd addAtTick 34818 "demo_pause; demo_gototick 40130; spec_player 9; demo_resume";
 ```
 
 ## Validation and Error Handling
@@ -175,6 +197,7 @@ mirv_cmd addAtTick 118664 "mirv_streams record end; host_framerate 0";
   - invalid extension (non-`.dem`)
   - missing / non-regular / empty file
   - invalid SteamID64 format
+  - unknown highlight type in `--types` / render targets
   - leading/trailing spaces in CLI string flags are trimmed before validation and execution
 - Parser safety behavior:
   - defensive demo-path validation
@@ -185,23 +208,26 @@ mirv_cmd addAtTick 118664 "mirv_streams record end; host_framerate 0";
 ## Architecture
 
 - `cmd/highlighter`: CLI entrypoint
-- `internal/bootstrap`: config parsing and pipeline bootstrapping
+- `internal/bootstrap`: flag parsing and the CLI run (file output lives here)
+- `internal/engine`: I/O-free core — roster listing, parse + highlight extraction, parse-progress streaming
 - `internal/parser`: demo event extraction (`demoinfocs`)
 - `internal/service`: highlight rules and domain logic
-- `internal/hlae`: segment planning and script rendering
+- `internal/hlae`: render targets, segment planning, script rendering
 - `internal/repository`: persistence layer
+- `internal/model`: shared types
 
 ## Limitations
 
 - Output quality depends on demo integrity and parser event fidelity.
 - Clutch detection is rule-based, not model/vision-based.
-- Headshot montage is playback jump-cut automation, not NLE post-production.
+- Montages are playback jump-cut automation, not NLE post-production.
 
 ## Roadmap
 
 1. New highlight types (`awp_flick`, `360`, etc.).
-2. Highlight rule selection.
-3. Add audio to recorded highlight videos.
+2. Interactive TUI (demo/player selection, live progress, highlight picker).
+3. Automated HLAE launch/recording (`recorder`).
+4. Add audio to recorded highlight videos.
 
 ## License
 
