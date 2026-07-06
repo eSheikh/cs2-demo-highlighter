@@ -30,7 +30,7 @@ func TestBuildHighlightsBuildsSingleAndMultiKill(t *testing.T) {
 		},
 	}
 
-	result := svc.BuildHighlights("match.dem", "7656119", 64, kills)
+	result := svc.BuildHighlights("match.dem", "7656119", 64, kills, nil)
 
 	if result.Demo != "match.dem" || result.SteamID != "7656119" || result.TickRate != 64 {
 		t.Fatalf("unexpected metadata: %+v", result)
@@ -46,6 +46,23 @@ func TestBuildHighlightsBuildsSingleAndMultiKill(t *testing.T) {
 	}
 	if result.Highlights[2].Type != model.HighlightMultiKill {
 		t.Fatalf("expected multikill highlight, got %s", result.Highlights[2].Type)
+	}
+}
+
+func TestBuildHighlightsAppliesSelection(t *testing.T) {
+	svc := NewHighlightService()
+	kills := []model.KillEvent{
+		{Tick: 100, Round: 1, VictimID: "v1", KillerSlot: 7, IsWallbang: true},
+		{Tick: 120, Round: 1, VictimID: "v2", KillerSlot: 7, IsNoScope: true},
+	}
+
+	result := svc.BuildHighlights("match.dem", "s", 64, kills, model.Selection{model.HighlightMultiKill: true})
+
+	if len(result.Highlights) != 1 {
+		t.Fatalf("expected only multikill after selection, got %d", len(result.Highlights))
+	}
+	if result.Highlights[0].Type != model.HighlightMultiKill {
+		t.Fatalf("expected multikill, got %s", result.Highlights[0].Type)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/eSheikh/cs2-demo-highlighter/internal/demo"
 	"github.com/eSheikh/cs2-demo-highlighter/internal/hlae"
+	"github.com/eSheikh/cs2-demo-highlighter/internal/model"
 	"github.com/eSheikh/cs2-demo-highlighter/internal/service"
 )
 
@@ -16,6 +17,7 @@ type Config struct {
 	DemoPath   string
 	SteamID    string
 	OutputPath string
+	Types      model.Selection
 	HLAE       hlae.Options
 }
 
@@ -41,9 +43,12 @@ func ParseConfig(args []string) (Config, error) {
 		},
 	}
 
+	var typesRaw string
+
 	flags := flag.NewFlagSet("highlighter", flag.ContinueOnError)
 	flags.StringVar(&cfg.DemoPath, "demo", "", "path to .dem file")
 	flags.StringVar(&cfg.SteamID, "steamid", "", "steamid64 to filter kills")
+	flags.StringVar(&typesRaw, "types", "", "comma-separated highlight types to keep (empty = all): "+strings.Join(highlightTypeNames(), ","))
 	flags.StringVar(&cfg.OutputPath, "out", cfg.OutputPath, "output json path")
 	flags.StringVar(&cfg.HLAE.ScriptPath, "hlae", cfg.HLAE.ScriptPath, "output HLAE automation script path")
 	flags.StringVar(&cfg.HLAE.HeadshotMontageScriptPath, "hlae-headshots", cfg.HLAE.HeadshotMontageScriptPath, "output HLAE script path for one-file headshot montage")
@@ -59,11 +64,59 @@ func ParseConfig(args []string) (Config, error) {
 		return Config{}, err
 	}
 	cfg.normalize()
+
+	selection, err := parseTypes(typesRaw)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.Types = selection
+
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
 
 	return cfg, nil
+}
+
+func highlightTypeNames() []string {
+	types := model.AllHighlightTypes()
+	names := make([]string, 0, len(types))
+	for _, t := range types {
+		names = append(names, string(t))
+	}
+	return names
+}
+
+// parseTypes turns a comma-separated list of highlight types into a Selection.
+// Empty input yields a nil selection (all types enabled). Unknown names fail.
+func parseTypes(raw string) (model.Selection, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	valid := make(map[model.HighlightType]bool, len(model.AllHighlightTypes()))
+	for _, t := range model.AllHighlightTypes() {
+		valid[t] = true
+	}
+
+	selection := make(model.Selection)
+	for _, token := range strings.Split(trimmed, ",") {
+		name := strings.TrimSpace(token)
+		if name == "" {
+			continue
+		}
+		highlightType := model.HighlightType(name)
+		if !valid[highlightType] {
+			return nil, fmt.Errorf("unknown highlight type %q (valid: %s)", name, strings.Join(highlightTypeNames(), ", "))
+		}
+		selection[highlightType] = true
+	}
+
+	if len(selection) == 0 {
+		return nil, nil
+	}
+	return selection, nil
 }
 
 func (c *Config) normalize() {

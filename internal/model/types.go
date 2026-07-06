@@ -15,6 +15,30 @@ const (
 	HighlightHeadshotMix HighlightType = "headshot_collection"
 )
 
+func AllHighlightTypes() []HighlightType {
+	return []HighlightType{
+		HighlightKillInSmoke,
+		HighlightKillBlinded,
+		HighlightWallbang,
+		HighlightNoScope,
+		HighlightHeadshot,
+		HighlightMultiKill,
+		HighlightClutchWin,
+		HighlightHeadshotMix,
+	}
+}
+
+// Selection is the set of highlight types to keep. An empty selection means
+// "all types enabled", so the zero value is a no-op filter.
+type Selection map[HighlightType]bool
+
+func (s Selection) Enabled(t HighlightType) bool {
+	if len(s) == 0 {
+		return true
+	}
+	return s[t]
+}
+
 type KillEvent struct {
 	Tick       int
 	Time       time.Duration

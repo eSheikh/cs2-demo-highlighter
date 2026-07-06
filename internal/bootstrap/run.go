@@ -28,7 +28,11 @@ func Run(ctx context.Context, args []string, logger *log.Logger) error {
 		service.NewHighlightService(),
 	)
 
-	result, err := eng.Extract(ctx, cfg.DemoPath, cfg.SteamID, nil)
+	result, err := eng.Extract(ctx, engine.ExtractOptions{
+		DemoPath: cfg.DemoPath,
+		SteamID:  cfg.SteamID,
+		Types:    cfg.Types,
+	})
 	if err != nil {
 		return err
 	}

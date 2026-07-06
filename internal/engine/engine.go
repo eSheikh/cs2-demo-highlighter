@@ -15,12 +15,22 @@ type DemoParser interface {
 }
 
 type HighlightBuilder interface {
-	BuildHighlights(demo string, steamID string, tickRate float64, kills []model.KillEvent) model.HighlightResult
+	BuildHighlights(demo string, steamID string, tickRate float64, kills []model.KillEvent, selection model.Selection) model.HighlightResult
 }
 
 // Progress reports parsing advancement as a 0..1 fraction.
 type Progress struct {
 	Fraction float64
+}
+
+// ExtractOptions configures a single extraction run. Types selects which
+// highlight types to keep (empty = all). Progress, if non-nil, receives updates
+// as parsing advances and is closed on return.
+type ExtractOptions struct {
+	DemoPath string
+	SteamID  string
+	Types    model.Selection
+	Progress chan<- Progress
 }
 
 type Engine struct {
@@ -37,28 +47,29 @@ func (e *Engine) Roster(ctx context.Context, demoPath string) ([]model.Player, e
 	return e.parser.Roster(ctx, demoPath)
 }
 
-// Extract parses the demo and builds highlights for steamID. If progress is
-// non-nil it receives updates as parsing advances and is closed on return; the
-// send is non-blocking, so a slow consumer only drops intermediate updates.
-func (e *Engine) Extract(ctx context.Context, demoPath string, steamID string, progress chan<- Progress) (model.HighlightResult, error) {
-	if progress != nil {
-		defer close(progress)
+// Extract parses the demo and builds the selected highlights for opts.SteamID.
+// If opts.Progress is non-nil it receives updates as parsing advances and is
+// closed on return; the send is non-blocking, so a slow consumer only drops
+// intermediate updates.
+func (e *Engine) Extract(ctx context.Context, opts ExtractOptions) (model.HighlightResult, error) {
+	if opts.Progress != nil {
+		defer close(opts.Progress)
 	}
 
 	onProgress := func(fraction float64) {
-		if progress == nil {
+		if opts.Progress == nil {
 			return
 		}
 		select {
-		case progress <- Progress{Fraction: fraction}:
+		case opts.Progress <- Progress{Fraction: fraction}:
 		default:
 		}
 	}
 
-	parsed, err := e.parser.Parse(ctx, demoPath, steamID, onProgress)
+	parsed, err := e.parser.Parse(ctx, opts.DemoPath, opts.SteamID, onProgress)
 	if err != nil {
 		return model.HighlightResult{}, err
 	}
 
-	return e.builder.BuildHighlights(parsed.Demo, steamID, parsed.TickRate, parsed.Kills), nil
+	return e.builder.BuildHighlights(parsed.Demo, opts.SteamID, parsed.TickRate, parsed.Kills, opts.Types), nil
 }

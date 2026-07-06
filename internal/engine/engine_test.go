@@ -45,7 +45,9 @@ func TestExtractBuildsHighlightsAndStreamsProgress(t *testing.T) {
 	eng := New(parser, service.NewHighlightService())
 
 	progress := make(chan Progress, 8)
-	result, err := eng.Extract(context.Background(), "match.dem", "steam", progress)
+	result, err := eng.Extract(context.Background(), ExtractOptions{
+		DemoPath: "match.dem", SteamID: "steam", Progress: progress,
+	})
 	if err != nil {
 		t.Fatalf("extract: %v", err)
 	}
@@ -70,7 +72,9 @@ func TestExtractPropagatesParseErrorAndClosesProgress(t *testing.T) {
 	eng := New(parser, service.NewHighlightService())
 
 	progress := make(chan Progress, 1)
-	_, err := eng.Extract(context.Background(), "match.dem", "steam", progress)
+	_, err := eng.Extract(context.Background(), ExtractOptions{
+		DemoPath: "match.dem", SteamID: "steam", Progress: progress,
+	})
 	if err == nil {
 		t.Fatalf("expected parse error")
 	}
@@ -91,8 +95,33 @@ func TestExtractWithoutProgressChannel(t *testing.T) {
 	parser := &fakeParser{parsed: model.ParsedDemo{Demo: "m.dem", TickRate: 64}, fractions: []float64{0.5}}
 	eng := New(parser, service.NewHighlightService())
 
-	if _, err := eng.Extract(context.Background(), "m.dem", "steam", nil); err != nil {
+	if _, err := eng.Extract(context.Background(), ExtractOptions{DemoPath: "m.dem", SteamID: "steam"}); err != nil {
 		t.Fatalf("extract without progress: %v", err)
+	}
+}
+
+func TestExtractAppliesTypeSelection(t *testing.T) {
+	parser := &fakeParser{
+		parsed: model.ParsedDemo{
+			Demo:     "match.dem",
+			TickRate: 64,
+			Kills: []model.KillEvent{
+				{Tick: 100, Round: 1, VictimID: "v1", KillerSlot: 7, IsWallbang: true},
+			},
+		},
+	}
+	eng := New(parser, service.NewHighlightService())
+
+	res, err := eng.Extract(context.Background(), ExtractOptions{
+		DemoPath: "match.dem",
+		SteamID:  "steam",
+		Types:    model.Selection{model.HighlightNoScope: true},
+	})
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	if len(res.Highlights) != 0 {
+		t.Fatalf("expected wallbang filtered out, got %+v", res.Highlights)
 	}
 }
 
